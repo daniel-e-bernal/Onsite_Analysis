@@ -1,0 +1,16 @@
+{
+    "Settings":{  
+    },
+    "Site": { 
+    },
+    "Financial": {    
+    },
+    "ElectricLoad": {          
+    },
+    "Wind":{    
+    },
+    "ElectricTariff": {
+    },
+    "ElectricUtility": { 
+    }
+  }
