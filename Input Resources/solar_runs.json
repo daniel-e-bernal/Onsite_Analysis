@@ -1,0 +1,17 @@
+{
+    "Settings":{  
+    },
+    "Site": { 
+    },
+    "Financial": {    
+    },
+    "ElectricLoad": {          
+    },
+    "PV":{
+        "location": "both"    
+    },
+    "ElectricTariff": {
+    },
+    "ElectricUtility": { 
+    }
+  }
