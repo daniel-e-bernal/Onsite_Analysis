@@ -3,6 +3,7 @@ from rex.sam_resource import SAMResource
 import numpy as np 
 # import pandas as pd
 
+#Below is HoPP specific, arguments
 # NOTE: creating these variables as placeholders, these will need to be updated to self.X attributes of the WindResource class object
 year = 2012
 # flatirons_site.yaml
@@ -11,12 +12,16 @@ lon = -101.945027
 hub_height_meters = 97.0
 allowed_hub_height_meters = [10, 40, 60, 80, 100, 120, 140, 160, 200]
 
+#2014 is the most updated, WINDToolkit jsut did it from 07-14
 # NOTE: Current setup of files on HPC v1.0.0 = 2007-2013, v1.1.0 = 2014
 if year < 2014:
     wtk_file = '/datasets/WIND/conus/v1.0.0/wtk_conus_{year}.h5'.format(year=year)
 elif year == 2014:
     wtk_file = '/datasets/WIND/conus/v1.1.0/wtk_conus_{year}.h5'.format(year=year)
 
+# in PySAM they allow hub heights as mentioned in line 13 -- maybe what's available in WINDToolkit
+#if the hub height that you specify is 90 m, then if your hub height is not within the list in line 13 then
+#it interpolates based on upper (next best) and lower (next best) hub height
 def calculate_heights_to_download():
     """
     Given the system hub height, and the available hubheights from WindToolkit,
@@ -110,7 +115,9 @@ elif len(heights) == 1:
 #                                     wind_dict['winddirection_{h}m_arr'.format(h=heights[0])].reshape(8760,1)
 #                                     ), axis=1).tolist()
 
-
+#This is HoPP class, dictionary format that PySAM accepts the data in
+#maybe reformat
+#PySAM does the interpolation -- likely
 # Final dictionary for use in wind_resource.py
 _data = {'heights': [float(h) for h in heights for i in range(4)],
          'fields':  [1, 2, 3, 4] * len(heights),

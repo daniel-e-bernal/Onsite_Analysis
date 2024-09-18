@@ -31,6 +31,16 @@ function safe_get(data::Dict{String, Any}, keys::Vector{String}, default=0)
     end
 end
 
+#read CSV file with coordinates
+csv_land_file = #input location of file, supposed to contain the lat/long and space availability of all/representative sites 
+coord_data = CSV.read( ,DataFrame)
+lat = coord_data.Latitude 
+long = coord_data.Longitude 
+
+#read XLSX file with site information
+xlsx_site_file = #input location of file, supposed to contain the lat/long and space availability of all/representative sites 
+
+
 # make a new logic for selecting the wind size_class
 function wind_size_class()
     """ First Constraint - Migration Paths
@@ -63,11 +73,12 @@ sites_iter = eachindex() #will contain the number of sites, likely ~50,000
 for i in sites_iter
     input_data_site = copy(input_data)
 
-    # site specific inputs 
+    # site specific inputs
     input_data_site["Site"]["latitude"] = lat[i]
     input_data_site["Site"]["longitude"] = long[i]
     input_data_site["ElectricLoad"]["loads_kw"] = #will input the loads here, likely a function to select type of load depending on sector and climate zone
-    input_data_site[""]
+    input_data_site["Wind"]["size_class"] = wind_size_class()
+
 
     # set up scenario and inputs
     s = Scenario(input_data_site)
