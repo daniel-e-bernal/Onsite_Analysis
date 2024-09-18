@@ -13,10 +13,10 @@ lon = -101.945027
 # lon = -96.9516
 
 # NOTE: Old deprecated version of PSM v3.1 which corresponds to /api/nsrdb/v2/solar/psm3-download (what HOPP is currently calling)
-nsrdb_file = '/datasets/NSRDB/deprecated_v3/nsrdb_{year}.h5'.format(year=year)
+#nsrdb_file = '/datasets/NSRDB/deprecated_v3/nsrdb_{year}.h5'.format(year=year)
 
 # NOTE: Current version of PSM v3.2.2 which corresponds to /api/nsrdb/v2/solar/psm3-2-2-download 
-# nsrdb_file = '/datasets/NSRDB/current/nsrdb_{year}.h5'.format(year=year)
+nsrdb_file = '/datasets/NSRDB/current/nsrdb_{year}.h5'.format(year=year)
 
 with NSRDBX(nsrdb_file, hsds=False) as f:
     # get gid of location closest to given lat/lon coordinates
