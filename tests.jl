@@ -22,7 +22,7 @@ energy_loss_df = DataFrame(
     m = [row[7] for row in energy_loss_data],
     b = [row[8] for row in energy_loss_data] 
 )
-println(energy_loss_df)
+#println(energy_loss_df)
 
 #(0: Ground Mount Fixed (Open Rack); 1: Rooftop, Fixed; 2: Ground Mount 1-Axis Tracking)
 function GCR_eq(;
@@ -79,15 +79,13 @@ function basic_tilt(latitude::Real, array_type::Integer)
 end
 
 """
-Below is a work in progress that calculates the tilt based on optimized tilt angle from 
-work done by Tonita et al 2023. The researcher suggested that we can get additional information
-from the corresponding author whom is Erin M. Tonita.
-
-Tonita's email is here <etoni044@uottawa.ca>
+Below is a work in progress that is completed.
+It calculates the tilt based on optimized tilt angle from work done by Tonita et al 2023. 
+We use Tonita et al's figures and data which was sent over to Daniel Bernal.
 """
 
 #below we have the tilt adjustment factor data. The rows correspond to the specific latitude range.
-#the columns correspond to the GCR, which is the following: [0.0, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0]
+#the columns correspond to the GCR, which is the following: [1.0, 0.667, 0.50, 0.40, 0.285714, 0.20, 0.1, 0.002]
 #defining the data to calculate tilt optimum
 tilt_adjustment_factor_data = [
     (74.6973,	-60,	-60,	-49.2,	-39.5,	-25.7,	-19.2,	-13.7,	-12.3),
@@ -128,11 +126,11 @@ tilt_adjustment_factor_df = DataFrame(
     GCR_3 = [row[4] for row in tilt_adjustment_factor_data], #GCR_3 = 0.5
     GCR_4 = [row[5] for row in tilt_adjustment_factor_data], #GCR_4 = 0.4
     GCR_5 = [row[6] for row in tilt_adjustment_factor_data], #GCR_5 = 0.285714
-    GCR_6 = [row[2] for row in tilt_adjustment_factor_data], #GCR_6 = 0.2
-    GCR_7 = [row[2] for row in tilt_adjustment_factor_data], #GCR_7 = 0.1
-    GCR_8 = [row[2] for row in tilt_adjustment_factor_data] #GCR_8 = 0.002
+    GCR_6 = [row[7] for row in tilt_adjustment_factor_data], #GCR_6 = 0.2
+    GCR_7 = [row[8] for row in tilt_adjustment_factor_data], #GCR_7 = 0.1
+    GCR_8 = [row[9] for row in tilt_adjustment_factor_data] #GCR_8 = 0.002
 )
-println(tilt_adjustment_factor_df)
+#println(tilt_adjustment_factor_df)
 
 gcr_data_vector = [
     (GCR=1.000, row_spacing=2, name="GCR_1"),
@@ -165,23 +163,16 @@ function closest_GCR(;
     return closest_tuple
 end
 
-function closest_lat(;
-    latitude::Float64,
-    data_table = tilt_adjustment_factor_df #directly assigns the data table
-    )
-    #find lat closest to the latitude input 
-    closer_lat = data_table[!, latitude_input]
-    min_diff = abs(latitude)
-end
-
+#get the optimal tilt 
 function tilt_pv(;
     latitude::Real,
     GCR::Real,
     array_type::Integer, #(0: Ground Mount Fixed (Open Rack); 1: Rooftop, Fixed; 2: Ground Mount 1-Axis Tracking)
     tilt_adjustment_factor_df = tilt_adjustment_factor_df
     )
-    
-    if GCR < 0 && GCR >= 1
+    gcr_val = GCR
+    println(gcr_val)
+    if GCR < 0 || GCR >= 1
         println("Invalid GCR value. Available options are:", GCR_cols)
         return nothing
     end
@@ -193,27 +184,23 @@ function tilt_pv(;
         tilt = 15.00
         return tilt
     elseif array_type == 0 #ground mounted fixed tilt
-        #provides String form of the column name that would be in the df with the adjustment factor
-        close_GCR = closest_GCR(GCR)[3]
-        
- 
+        # Get the closest GCR and the corresponding tilt adjustment factor
+        closest_gcr_tuple = closest_GCR(GCR=gcr_val)  #this returns the tuple (GCR, row_spacing, name)
+        closest_gcr_value = closest_gcr_tuple.name #provides string form of the column name that would be in the df with the adjustment factor
+        println(closest_gcr_value)
+        tilt_column = Symbol(closest_gcr_value)  #generate the column name dynamically
+        println(tilt_column)
+        #find the index of the latitude that is closest to the given latitude
+        lat_diff = abs.(tilt_adjustment_factor_df.latitude_input .- latitude)
+        println(lat_diff)
+        closest_lat_idx = argmin(lat_diff)  #get index of closest latitude
+        println(closest_lat_idx)
+        #extract the adjustment factor from the dataframe for the closest latitude and GCR
+        tilt_adjustment = tilt_adjustment_factor_df[closest_lat_idx, tilt_column]
+        println(tilt_adjustment)
         # Output the tilt based on the GCR adjustment factor
         tilt = latitude + tilt_adjustment
+        return tilt
     end
-    """
-    # Find the latitude range row that applies
-    row = nothing
-    for i in 1:length(tilt_adjustment_factor_data)
-        if latitude > tilt_adjustment_factor_data[i][1]
-            row = tilt_adjustment_factor_data[i]
-            break
-        end
-    end
- 
-    # Error handling for invalid latitude
-    if row === nothing
-        println("No valid latitude adjustment found for $latitude")
-        return nothing
-    end"""
     return tilt
 end
