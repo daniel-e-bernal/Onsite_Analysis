@@ -1,4 +1,4 @@
-"""just some testing"""
+"""Ready for use"""
 
 using DataFrames, Statistics, DelimitedFiles, CSV, XLSX, REopt, FilePaths, Distributions, StatsBase
 
