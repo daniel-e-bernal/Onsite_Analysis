@@ -204,3 +204,28 @@ function tilt_pv(;
     end
     return tilt
 end
+
+function power_density(;
+    array_type::Integer #(0: Ground Mount Fixed (Open Rack); 1: Rooftop, Fixed; 2: Ground Mount 1-Axis Tracking)
+    )
+    if array_type == 0 #Ground Mount Fixed, acres/kW
+        power_density = 0.0031
+        return power_density
+    elseif  array_type == 1 #rooftop fixed, kW/ft^2
+        power_density = 0.017
+        return power_density
+    else                #ground mount 1-axis tracking, acres/kW
+        power_density = 0.0042
+        return power_density
+    end
+end
+
+function power_density_converter_for_REopt(;
+    value::Real,
+    incoming::String,
+    outgoing::String,
+    array_type::Integer #(0: Ground Mount Fixed (Open Rack); 1: Rooftop, Fixed; 2: Ground Mount 1-Axis Tracking)
+    )
+    
+    
+end
