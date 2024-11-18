@@ -246,7 +246,7 @@ function power_density_converter_for_REopt(;
 end
 
 #columns to select from csv file for parcel data
-cols = [:MatchID, :naicsCode, :latitude, :longitude, :state, :airport_5km_int, :urban_area_int, :DOD_airspace_int, :critical_habs_1_int, :critical_habs_2_int, :wind_exclusion, :cejst_dac_int, :FLD_PFS, :WFR_PFS, :rooftop_area_m2, :solarPV_ground_area, :wind_ground_area, :under_1_acre]
+cols = [:MatchID, :naicsCode, :place_name, :latitude, :longitude, :state, :airport_5km_int, :urban_area_int, :DOD_airspace_int, :critical_habs_1_int, :critical_habs_2_int, :wind_exclusion, :cejst_dac_int, :FLD_PFS, :WFR_PFS, :rooftop_area_m2, :solarPV_ground_area, :wind_ground_area, :under_1_acre]
 function read_csv_parcel_file(file_path::String)
     # Read the CSV into a DataFrame
     initial_df = CSV.read(file_path, DataFrame)
@@ -260,11 +260,12 @@ end
 data_file = "solar_runs.json"
 input_data = JSON.parsefile("Input Resources/$data_file")
 
-#parcel file 
-file_name = "./Input Resources/LC_facility_parcels_NREL_9_27.csv"
-
+#parcel file path of internal
+file_name = "C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/Analysis Team/Input Resources/LC_facility_parcels_NREL_9_27.csv"
+#parcel file path in IEDO Teams 
+file_name_ = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PNNL Parcel Land Coverage Analysis/updated_9_27_2024/LC_facility_parcels_NREL_9_27.csv"
 #get data from CSV file for parcel data 
-data = read_csv_parcel_file(file_name)
+data = read_csv_parcel_file(file_name_)
 
 #establish number of runs 
 number_of_runs = collect(1:1)
@@ -328,6 +329,7 @@ println("Successfully printed results on JSON file")
 df = DataFrame(
     MatchID = cols[!, :MatchID][i] for i in sites_iter,
     NAICS = cols[!, :naicsCode][i] for i in sites_iter,
+    name = cols[!, :place_name][i] for i in sites_iter,
     input_Latitude = [safe_get(input_data_dic[i], ["Site", "latitude"]) for i in sites_iter],
     input_Longitude = [safe_get(input_data_dic[i], ["Site", "longitude"]) for i in sites_iter],
     input_PV_location = [safe_get(input_data_dic[i], ["PV", "location"]) for i in sites_iter],
