@@ -1,7 +1,22 @@
 """Ready for use"""
 
-using DataFrames, Statistics, DelimitedFiles, CSV, XLSX, REopt, FilePaths, Distributions, StatsBase
+using DataFrames, Statistics, DelimitedFiles, CSV, XLSX, REopt, FilePaths, Distributions, StatsBase, JSON, Xpress
 
+# Function to safely extract values from JSON with default value if key is missing
+function safe_get(data::Dict{String, Any}, keys::Vector{String}, default=0)
+    try
+        for k in keys
+            data = data[k]
+        end
+        return data
+    catch e
+        if e isa KeyError
+            return default
+        else
+            rethrow(e)
+        end
+    end
+end
 #defining the data to calculate GCR
 energy_loss_data = [
     ("5%", "bifacial", -0.560, 0.133, 40.2, 0.70, -0.00268, 0.361),
@@ -229,3 +244,121 @@ function power_density_converter_for_REopt(;
     
     
 end
+
+#columns to select from csv file for parcel data
+cols = [:MatchID, :naicsCode, :latitude, :longitude, :state, :airport_5km_int, :urban_area_int, :DOD_airspace_int, :critical_habs_1_int, :critical_habs_2_int, :wind_exclusion, :cejst_dac_int, :FLD_PFS, :WFR_PFS, :rooftop_area_m2, :solarPV_ground_area, :wind_ground_area, :under_1_acre]
+function read_csv_parcel_file(file_path::String)
+    # Read the CSV into a DataFrame
+    initial_df = CSV.read(file_path, DataFrame)
+    
+    #get the selected cols from the df
+    df = initial_df[:, cols]
+    return df 
+end
+
+#Set-up inputs file for PV runs 
+data_file = "solar_runs.json"
+input_data = JSON.parsefile("Input Resources/$data_file")
+
+#parcel file 
+file_name = "./Input Resources/LC_facility_parcels_NREL_9_27.csv"
+
+#get data from CSV file for parcel data 
+data = read_csv_parcel_file(file_name)
+
+#establish number of runs 
+number_of_runs = collect(1:1)
+
+#store results
+analysis_runs = []
+input_data_dic = [] #to store the input_data_site
+
+sites_iter = eachindex(number_of_runs)
+for i in sites_iter
+    input_data_site = copy(input_data)
+
+    #get the standard inputs 
+    latitude = data[!, :latitude][i]
+    longitude = data[!, :longitude][i]
+
+    land_acres = data[!, :solarPV_ground_area][i] * 4046.86 #conversion from m2 to acres
+    roof_space = data[!, :rooftop_area_m2] * 10.7639 #conversion from m2 to ft2
+    #assign over 1 MW threshold of changing from ground mount FIXED to ground mount one-axis tracking 
+    if land_acres < 6 #less than 6 acres 
+        array_type_i = 0
+    else                #if greater than or equal to 6 acres 
+        array_type_i = 2
+    end
+    #assign gcr 
+    gcr_pv = GCR_eq(latitude=latitude, array_type=array_type_i)
+    """ Work in progress
+    #if there is greater than 1 acre of PV land available AND roofspace available then have 2 different types of PVs
+    if land_acres > 0 && roof_space > 0
+        input_data_site["PV"]["name"] = ["PV_ground", "PV_roof"]
+    else 
+        input_data_site["PV"]["name"] = "PV"
+    """
+    #input into the site specific data
+    input_data_site["Site"]["latitude"] = latitude
+    input_data_site["Site"]["longitude"] = longitude
+    input_data_site["Site"]["land_acres"] = land_acres
+    input_data_site["PV"]["roof_squarefeet"] = roof_space
+    input_data_site["PV"]["acres_per_kw"] = power_density(array_type=array_type_i)
+    input_data_site["PV"]["kw_per_square_foot"] = power_density(array_type=array_type_i)
+    input_data_site["PV"]["gcr"] = gcr_pv
+    input_data_site["PV"]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
+    
+    
+    s = Scenario(input_data_site)
+    inputs = REoptInputs(s)
+    m = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
+    results = run_reopt(m, inputs)
+    
+    #store results
+    append!(analysis_runs, [(input_data_site, results)])
+    #store inputs 
+    append!(input_data_dic, [deepcopy(input_data_site)])
+end
+println("Completed optimization")
+
+#write onto JSON file
+write.("./results/PV_results.json", JSON.json(analysis_runs))
+println("Successfully printed results on JSON file")
+
+df = DataFrame(
+    MatchID = cols[!, :MatchID][i] for i in sites_iter,
+    NAICS = cols[!, :naicsCode][i] for i in sites_iter,
+    input_Latitude = [safe_get(input_data_dic[i], ["Site", "latitude"]) for i in sites_iter],
+    input_Longitude = [safe_get(input_data_dic[i], ["Site", "longitude"]) for i in sites_iter],
+    input_PV_location = [safe_get(input_data_dic[i], ["PV", "location"]) for i in sites_iter],
+    input_PV_installed_cost = [round(safe_get(input_data_dic[i], ["PV", "installed_cost_per_kw"]), digits=2) for i in sites_iter],
+    input_Site_electric_load = [round(safe_get(input_data_dic[i], ["ElectricLoad", "annual_kwh"]), digits=0) for i in sites_iter],
+    input_Site_roofspace = [round(safe_get(input_data_dic[i], ["Site", "roof_squarefeet"]), digits=0) for i in sites_iter],
+    input_Site_landspace = [round(safe_get(input_data_dic[i], ["Site", "land_acres"]), digits=0) for i in sites_iter],
+    PV_size = [round(safe_get(analysis_runs[i][2], ["PV", "size_kw"]), digits=0) for i in sites_iter],
+    PV_year1_production = [round(safe_get(analysis_runs[i][2], ["PV", "year_one_energy_produced_kwh"]), digits=0) for i in sites_iter],
+    PV_annual_energy_production_avg = [round(safe_get(analysis_runs[i][2], ["PV", "annual_energy_produced_kwh"]), digits=0) for i in sites_iter],
+    PV_energy_lcoe = [round(safe_get(analysis_runs[i][2], ["PV", "lcoe_per_kwh"]), digits=0) for i in sites_iter],
+    PV_energy_exported = [round(safe_get(analysis_runs[i][2], ["PV", "annual_energy_exported_kwh"]), digits=0) for i in sites_iter],
+    PV_energy_curtailed = [sum(safe_get(analysis_runs[i][2], ["PV", "electric_curtailed_series_kw"], 0)) for i in sites_iter],
+    Grid_Electricity_Supplied_kWh_annual = [round(safe_get(analysis_runs[i][2], ["ElectricUtility", "annual_energy_supplied_kwh"]), digits=0) for i in sites_iter],
+    Total_Annual_Emissions_CO2 = [round(safe_get(analysis_runs[i][2], ["Site", "annual_emissions_tonnes_CO2"]), digits=4) for i in sites_iter],
+    ElecUtility_Annual_Emissions_CO2 = [round(safe_get(analysis_runs[i][2], ["ElectricUtility", "annual_emissions_tonnes_CO2"]), digits=4) for i in sites_iter],
+    BAU_Total_Annual_Emissions_CO2 = [round(safe_get(analysis_runs[i][2], ["Site", "annual_emissions_tonnes_CO2_bau"]), digits=4) for i in sites_iter],
+    LifeCycle_Emissions_CO2 = [round(safe_get(analysis_runs[i][2], ["Site", "lifecycle_emissions_tonnes_CO2"]), digits=2) for i in sites_iter],
+    BAU_LifeCycle_Emissions_CO2 = [round(safe_get(analysis_runs[i][2], ["Site", "lifecycle_emissions_tonnes_CO2_bau"]), digits=2) for i in sites_iter],
+    LifeCycle_Emission_Reduction_Fraction = [round(safe_get(analysis_runs[i][2], ["Site", "lifecycle_emissions_reduction_CO2_fraction"]), digits=2) for i in sites_iter],
+    LifeCycle_capex_costs_for_generation_techs = [round(safe_get(analysis_runs[i][2], ["Financial", "lifecycle_generation_tech_capital_costs"]), digits=2) for i in sites_iter],
+    Initial_upfront_capex_wo_incentives = [round(safe_get(analysis_runs[i][2], ["Financial", "initial_capital_costs"]), digits=2) for i in sites_iter],
+    Initial_upfront_capex_w_incentives = [round(safe_get(analysis_runs[i][2], ["Financial", "initial_capital_costs_after_incentives"]), digits=2) for i in sites_iter],
+    Yr1_energy_cost_after_tax = [round(safe_get(analysis_runs[i][2], ["ElectricTariff", "year_one_energy_cost_before_tax"]), digits=2) for i in sites_iter],
+    Yr1_demand_cost_after_tax = [round(safe_get(analysis_runs[i][2], ["ElectricTariff", "year_one_demand_cost_before_tax"]), digits=2) for i in sites_iter],
+    Yr1_total_energy_bill_before_tax = [round(safe_get(analysis_runs[i][2], ["ElectricTariff", "year_one_bill_before_tax"]), digits=2) for i in sites_iter],
+    Yr1_export_benefit_before_tax = [round(safe_get(analysis_runs[i][2], ["ElectricTariff", "year_one_export_benefit_before_tax"]), digits=2) for i in sites_iter],
+    Annual_renewable_electricity_kwh = [round(safe_get(analysis_runs[i][2], ["Site", "annual_renewable_electricity_kwh"]), digits=2) for i in sites_iter],
+    Annual_renewable_electricity_kwh_fraction = [round(safe_get(analysis_runs[i][2], ["Site", "renewable_electricity_fraction"]), digits=2) for i in sites_iter],
+    npv = [round(safe_get(analysis_runs[i][2], ["Financial", "npv"]), digits=2) for i in sites_iter],
+    lcc = [round(safe_get(analysis_runs[i][2], ["Financial", "lcc"]), digits=2) for i in sites_iter]
+)
+println(df)
+

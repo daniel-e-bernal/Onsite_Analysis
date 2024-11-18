@@ -1,13 +1,14 @@
 {
     "Settings":{  
+        "solve_name": "Xpress"
     },
     "Site": { 
     },
     "Financial": {    
     },
-    "ElectricLoad": {          
-    },
-    "DomesticHotWaterLoad": {
+    "ElectricLoad": {
+        "annual_kwh": 100000,
+        "doe_reference_name": "FlatLoad"          
     },
     "PV":{
         "location": "both"    
@@ -16,4 +17,4 @@
     },
     "ElectricUtility": { 
     }
-  }
+}
