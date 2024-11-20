@@ -1,6 +1,6 @@
 {
     "Settings":{  
-        "solve_name": "Xpress"
+        "solver_name": "Xpress"
     },
     "Site": { 
     },
@@ -14,6 +14,8 @@
         "location": "both"    
     },
     "ElectricTariff": {
+        "blended_annual_energy_rate": 0.10,
+        "blended_annual_demand_rate": 10
     },
     "ElectricUtility": { 
     }
