@@ -1,6 +1,6 @@
 """Ready for use"""
 
-using DataFrames, Statistics, DelimitedFiles, CSV, XLSX, REopt, FilePaths, Distributions, StatsBase, JSON, JuMP
+using DataFrames, Statistics, DelimitedFiles, CSV, XLSX, REopt, FilePaths, Distributions, StatsBase, JSON, JuMP, Xpress
 
 # Function to safely extract values from JSON with default value if key is missing
 function safe_get(data::Dict{String, Any}, keys::Vector{String}, default::Any=0)
@@ -317,17 +317,13 @@ for i in sites_iter
     longitude = convert_string_to_float(longitude)
     #conversion for land_acres
     land_acres = data[!, :solarPV_ground_area][i]
-    #println(land_acres, " is a ", typeof(land_acres))
     land_acres = round(land_acres * 4046.86, digits=4) #conversion from m2 to acres
-    #println(land_acres, " is a ", typeof(land_acres))
+    #roofspace conversion
     roof_space = data[!, :rooftop_area_m2][i]
     roof_space = String(roof_space)
-    #println(roof_space)
-    #println(roof_space, " is a ", typeof(roof_space))
     roof_space = convert_string_to_float(roof_space)
-    #println(roof_space, " is a ", typeof(roof_space))
-    roof_space = roof_space / 10.7639
-    #println(roof_space)
+    roof_space = round(roof_space / 10.7639, digits=4) #conversion from m2 to ft2 
+    
     #assign over 1 MW threshold of changing from ground mount FIXED to ground mount one-axis tracking 
     if land_acres < 6 #less than 6 acres 
         array_type_i = 0
@@ -357,16 +353,15 @@ for i in sites_iter
     
     s = Scenario(input_data_site)
     inputs = REoptInputs(s)
-    #m1 = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
-    #m2 = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
-    #results = run_reopt(m1, inputs)
-    
+    m1 = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
+    m2 = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
+    results = run_reopt([m1,m2], inputs)
     
     #store inputs = REoptInputs(s) into the dictionary
     append!(input_REopt_dic, [deepcopy(inputs)])
     s = scenario_to_dict(s)
     #store results
-    append!(analysis_runs, [(input_data_site, s)])
+    append!(analysis_runs, [(input_data_site, results)])
     #store inputs 
     append!(input_data_dic, [deepcopy(input_data_site)])
 end
@@ -391,6 +386,7 @@ df = DataFrame(
     MatchID = data[sites_iter, :MatchID],
     NAICS = data[sites_iter, :naicsCode],
     name = data[sites_iter, :place_name],
+    state = data[sites_iter, :state],
     input_Latitude = [safe_get(input_data_dic[i], ["Site", "latitude"]) for i in sites_iter],
     input_Longitude = [safe_get(input_data_dic[i], ["Site", "longitude"]) for i in sites_iter],
     input_PV_location = [safe_get(input_data_dic[i], ["PV", "location"]) for i in sites_iter],    
@@ -402,7 +398,7 @@ df = DataFrame(
     PV_annual_energy_production_avg = [round(analysis_runs[i][2]["PV"]["annual_energy_produced_kwh"], digits=0) for i in sites_iter],
     PV_energy_lcoe = [round(analysis_runs[i][2]["PV"]["lcoe_per_kwh"], digits=0) for i in sites_iter],
     PV_energy_exported = [round(analysis_runs[i][2]["PV"]["annual_energy_exported_kwh"], digits=0) for i in sites_iter],
-    PV_energy_curtailed = [sum(analysis_runs[i][2]["PV"]["electric_curtailed_series_kw"], 0) for i in sites_iter],
+    PV_energy_curtailed = [sum(safe_get(analysis_runs[i][2], ["PV", "electric_curtailed_series_kw"], 0)) for i in sites_iter],
     Grid_Electricity_Supplied_kWh_annual = [round(analysis_runs[i][2]["ElectricUtility"]["annual_energy_supplied_kwh"], digits=0) for i in sites_iter],
     Total_Annual_Emissions_CO2 = [round(analysis_runs[i][2]["Site"]["annual_emissions_tonnes_CO2"], digits=4) for i in sites_iter],
     ElecUtility_Annual_Emissions_CO2 = [round(analysis_runs[i][2]["ElectricUtility"]["annual_emissions_tonnes_CO2"], digits=4) for i in sites_iter],
