@@ -1,0 +1,29 @@
+{
+    "Settings":{  
+        "solver_name": "Xpress"
+    },
+    "Site": { 
+    },
+    "Financial": {    
+    },
+    "ElectricLoad": {
+        "annual_kwh": 100000,
+        "doe_reference_name": "FlatLoad"          
+    },
+    "PV":[
+        {
+            "name": "ground_mount",
+            "location": "ground"
+          },
+          {
+            "name": "roof_fixed",
+            "location": "roof"
+          }
+    ],    
+    "ElectricTariff": {
+        "blended_annual_energy_rate": 0.10,
+        "blended_annual_demand_rate": 10
+    },
+    "ElectricUtility": { 
+    }
+}
