@@ -284,11 +284,11 @@ function read_csv_parcel_file(file_path::String)
 end
 
 #Set-up inputs file for PV runs 
-data_file = "solar_runs.json"
+data_file = "solar_runs_v2.json"
 input_data = JSON.parsefile("./Input Resources/$data_file")
 
 #parcel file path of internal
-file_name = "C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/Analysis Team/Input Resources/LC_facility_parcels_NREL_9_27.csv"
+#file_name = "C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/Analysis Team/Input Resources/LC_facility_parcels_NREL_9_27.csv"
 #parcel file path in IEDO Teams 
 file_name_ = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PNNL Parcel Land Coverage Analysis/updated_9_27_2024/LC_facility_parcels_NREL_9_27.csv"
 #get data from CSV file for parcel data 
@@ -317,21 +317,13 @@ for i in sites_iter
     longitude = convert_string_to_float(longitude)
     #conversion for land_acres
     land_acres = data[!, :solarPV_ground_area][i]
-    land_acres = round(land_acres * 4046.86, digits=4) #conversion from m2 to acres
+    land_acres = round(land_acres / 4046.86, digits=4) #conversion from m2 to acres
     #roofspace conversion
     roof_space = data[!, :rooftop_area_m2][i]
     roof_space = String(roof_space)
     roof_space = convert_string_to_float(roof_space)
     roof_space = round(roof_space / 10.7639, digits=4) #conversion from m2 to ft2 
     
-    #assign over 1 MW threshold of changing from ground mount FIXED to ground mount one-axis tracking 
-    if land_acres < 6 #less than 6 acres 
-        array_type_i = 0
-    else                #if greater than or equal to 6 acres 
-        array_type_i = 2
-    end
-    #assign gcr 
-    gcr_pv = GCR_eq(latitude=latitude, array_type=array_type_i)
     """ Work in progress
     #if there is greater than 1 acre of PV land available AND roofspace available then have 2 different types of PVs
     if land_acres > 0 && roof_space > 0
@@ -344,13 +336,31 @@ for i in sites_iter
     input_data_site["Site"]["longitude"] = longitude
     input_data_site["Site"]["land_acres"] = land_acres
     input_data_site["Site"]["roof_squarefeet"] = roof_space
-    input_data_site["PV"]["array_type"] = array_type_i
-    input_data_site["PV"]["acres_per_kw"] = power_density(array_type=array_type_i)
-    input_data_site["PV"]["kw_per_square_foot"] = power_density(array_type=array_type_i)
-    input_data_site["PV"]["gcr"] = gcr_pv
-    input_data_site["PV"]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
-    
-    
+    for name in [1, 2] #["ground_fixed", "ground_one_axis", "roof_fixed"]
+        if input_data_site["PV"][name]["name"] == "ground_mount"
+            #assign over 1 MW threshold of changing from ground mount FIXED to ground mount one-axis tracking 
+            input_data_site["PV"][name]["array_type"] = land_acres < 6 ? 0 : 2 #if over 6 acres one-axis tracking
+            array_type_i = input_data_site["PV"][name]["array_type"]
+            #println(array_type_i)
+            input_data_site["PV"][name]["acres_per_kw"] = power_density(array_type=array_type_i)
+            input_data_site["PV"][name]["kw_per_square_foot"] = power_density(array_type=array_type_i)
+            #assign gcr 
+            gcr_pv = GCR_eq(latitude=latitude, array_type=array_type_i)
+            input_data_site["PV"][name]["gcr"] = gcr_pv
+            input_data_site["PV"][name]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
+        elseif input_data_site["PV"][name]["name"] == "roof_fixed"
+            input_data_site["PV"][name]["array_type"] = 1 #roof-fixed rack
+            array_type_i = input_data_site["PV"][name]["array_type"]
+            #println(array_type_i)
+            input_data_site["PV"][name]["acres_per_kw"] = power_density(array_type=array_type_i)
+            input_data_site["PV"][name]["kw_per_square_foot"] = power_density(array_type=array_type_i)
+            #assign gcr 
+            gcr_pv = GCR_eq(latitude=latitude, array_type=array_type_i)
+            input_data_site["PV"][name]["gcr"] = gcr_pv
+            input_data_site["PV"][name]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
+        end
+    end
+
     s = Scenario(input_data_site)
     inputs = REoptInputs(s)
     m1 = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
@@ -387,18 +397,34 @@ df = DataFrame(
     NAICS = data[sites_iter, :naicsCode],
     name = data[sites_iter, :place_name],
     state = data[sites_iter, :state],
-    input_Latitude = [safe_get(input_data_dic[i], ["Site", "latitude"]) for i in sites_iter],
-    input_Longitude = [safe_get(input_data_dic[i], ["Site", "longitude"]) for i in sites_iter],
-    input_PV_location = [safe_get(input_data_dic[i], ["PV", "location"]) for i in sites_iter],    
-    input_Site_electric_load = [round(safe_get(input_data_dic[i], ["ElectricLoad", "annual_kwh"]), digits=0) for i in sites_iter],
-    input_Site_roofspace = [round(safe_get(input_data_dic[i], ["Site", "roof_squarefeet"]), digits=0) for i in sites_iter],
-    input_Site_landspace = [round(safe_get(input_data_dic[i], ["Site", "land_acres"]), digits=0) for i in sites_iter],
-    PV_size = [round(analysis_runs[i][2]["PV"]["size_kw"], digits=0) for i in sites_iter],
-    PV_year1_production = [round(analysis_runs[i][2]["PV"]["year_one_energy_produced_kwh"], digits=0) for i in sites_iter],
-    PV_annual_energy_production_avg = [round(analysis_runs[i][2]["PV"]["annual_energy_produced_kwh"], digits=0) for i in sites_iter],
-    PV_energy_lcoe = [round(analysis_runs[i][2]["PV"]["lcoe_per_kwh"], digits=0) for i in sites_iter],
-    PV_energy_exported = [round(analysis_runs[i][2]["PV"]["annual_energy_exported_kwh"], digits=0) for i in sites_iter],
-    PV_energy_curtailed = [sum(safe_get(analysis_runs[i][2], ["PV", "electric_curtailed_series_kw"], 0)) for i in sites_iter],
+    input_Latitude = [round(inputs_all[i]["s"]["site"]["latitude"], digits=4) for i in sites_iter],
+    input_Longitude = [round(inputs_all[i]["s"]["site"]["longitude"], digits=4) for i in sites_iter],
+    input_roofsqft = [round(inputs_all[i]["s"]["site"]["roof_squarefeet"], digits=4) for i in sites_iter],
+    input_landacres = [round(inputs_all[i]["s"]["site"]["land_acres"], digits=4) for i in sites_iter],
+    input_annual_electric_load_kWh = [sum(inputs_all[i]["s"]["electric_load"]["loads_kw"]) for i in sites_iter],
+    #ground PV inputs
+    input_PV_ground_location = [input_data_dic[i]["PV"][1]["location"] for i in sites_iter],
+    input_PV_array_type_ground = [input_data_dic[i]["PV"][1]["array_type"] for i in sites_iter],
+    input_PV_ground_gcr = [input_data_dic[i]["PV"][1]["gcr"] for i in sites_iter],
+    input_PV_ground_tilt = [input_data_dic[i]["PV"][1]["tilt"] for i in sites_iter],
+    input_PV_ground_power_density = [input_data_dic[i]["PV"][1]["acres_per_kw"] for i in sites_iter],
+    PV_size_kw_ground = [round(analysis_runs[i][2]["PV"][1]["size_kw"], digits=0) for i in sites_iter],
+    PV_year1_production_ground = [round(analysis_runs[i][2]["PV"][1]["year_one_energy_produced_kwh"], digits=0) for i in sites_iter],
+    PV_annual_energy_production_avg_ground = [round(analysis_runs[i][2]["PV"][1]["annual_energy_produced_kwh"], digits=0) for i in sites_iter],
+    PV_energy_lcoe_ground = [round(analysis_runs[i][2]["PV"][1]["lcoe_per_kwh"], digits=0) for i in sites_iter],
+    PV_energy_exported_ground = [round(analysis_runs[i][2]["PV"][1]["annual_energy_exported_kwh"], digits=0) for i in sites_iter],
+    #roof PV inputs
+    input_PV_roof_location = [input_data_dic[i]["PV"][2]["location"] for i in sites_iter],
+    input_PV_array_type_roof = [input_data_dic[i]["PV"][2]["array_type"] for i in sites_iter],
+    input_PV_roof_gcr = [input_data_dic[i]["PV"][2]["gcr"] for i in sites_iter],
+    input_PV_roof_tilt = [input_data_dic[i]["PV"][2]["tilt"] for i in sites_iter],
+    input_PV_roof_power_density = [input_data_dic[i]["PV"][2]["acres_per_kw"] for i in sites_iter],
+    PV_size_kw_roof = [round(analysis_runs[i][2]["PV"][2]["size_kw"], digits=0) for i in sites_iter],
+    PV_year1_production_roof = [round(analysis_runs[i][2]["PV"][2]["year_one_energy_produced_kwh"], digits=0) for i in sites_iter],
+    PV_annual_energy_production_avg_roof = [round(analysis_runs[i][2]["PV"][2]["annual_energy_produced_kwh"], digits=0) for i in sites_iter],
+    PV_energy_lcoe_roof = [round(analysis_runs[i][2]["PV"][2]["lcoe_per_kwh"], digits=0) for i in sites_iter],
+    PV_energy_exported_roof = [round(analysis_runs[i][2]["PV"][2]["annual_energy_exported_kwh"], digits=0) for i in sites_iter],
+    #PV_energy_curtailed_roof = [sum(safe_get(analysis_runs[i][2], ["PV", "electric_curtailed_series_kw"], 0)) for i in sites_iter],
     Grid_Electricity_Supplied_kWh_annual = [round(analysis_runs[i][2]["ElectricUtility"]["annual_energy_supplied_kwh"], digits=0) for i in sites_iter],
     Total_Annual_Emissions_CO2 = [round(analysis_runs[i][2]["Site"]["annual_emissions_tonnes_CO2"], digits=4) for i in sites_iter],
     ElecUtility_Annual_Emissions_CO2 = [round(analysis_runs[i][2]["ElectricUtility"]["annual_emissions_tonnes_CO2"], digits=4) for i in sites_iter],
@@ -420,3 +446,32 @@ df = DataFrame(
 )
 println(df)
 
+# Define path to xlsx file
+file_storage_location = "./results/validation_run_results.xlsx"
+
+# Check if the Excel file already exists
+if isfile(file_storage_location)
+    # Open the Excel file in read-write mode
+    XLSX.openxlsx(file_storage_location, mode="rw") do xf
+        counter = 0
+        while true
+            sheet_name = "Results_" * string(counter)
+            try
+                sheet = xf[sheet_name]
+                counter += 1
+            catch
+                break
+            end
+        end
+        sheet_name = "Results_" * string(counter)
+        # Add new sheet
+        XLSX.addsheet!(xf, sheet_name)
+        # Write DataFrame to the new sheet
+        XLSX.writetable!(xf[sheet_name], df)
+    end
+else
+    # Write DataFrame to a new Excel file
+    XLSX.writetable!(file_storage_location, df)
+end
+
+println("Successful write into XLSX file: file_storage_location")
