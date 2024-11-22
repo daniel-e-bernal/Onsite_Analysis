@@ -1,6 +1,17 @@
 """Ready for use"""
 
-using DataFrames, Statistics, DelimitedFiles, CSV, XLSX, REopt, FilePaths, Distributions, StatsBase, JSON, JuMP, Xpress
+using DataFrames
+using Statistics
+using DelimitedFiles
+using CSV
+using XLSX
+using REopt
+using FilePaths
+using Distributions
+using StatsBase
+using JSON
+using JuMP
+using Xpress
 
 # Function to safely extract values from JSON with default value if key is missing
 function safe_get(data::Dict{String, Any}, keys::Vector{String}, default::Any=0)
@@ -295,7 +306,7 @@ file_name_ = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data
 data = read_csv_parcel_file(file_name_)
 
 #establish number of runs 
-number_of_runs = collect(1:2)
+number_of_runs = collect(1:1)
 
 #store results
 analysis_runs = []
@@ -360,9 +371,12 @@ for i in sites_iter
             input_data_site["PV"][name]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
         end
     end
-
+    
     s = Scenario(input_data_site)
     inputs = REoptInputs(s)
+    #testing
+    #PV_prod = sum(inputs.s.pvs.production_factor_series) / 8760
+    println("The pv production factor series is: ", inputs.s.pvs[1].production_factor_series)
     m1 = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
     m2 = Model(optimizer_with_attributes(Xpress.Optimizer, "OUTPUTLOG" => 0))
     results = run_reopt([m1,m2], inputs)
@@ -391,7 +405,7 @@ println("Successfully printed REopt inputs onto JSON dictionary file")
 inputs_file = "inputs_REopt.json"
 inputs_all = JSON.parsefile("results/$inputs_file")
 println("Successfuly parsed $inputs_file from JSON file")
-
+"""
 df = DataFrame(
     MatchID = data[sites_iter, :MatchID],
     NAICS = data[sites_iter, :naicsCode],
@@ -474,4 +488,4 @@ else
     XLSX.writetable!(file_storage_location, df)
 end
 
-println("Successful write into XLSX file: file_storage_location")
+println("Successful write into XLSX file: file_storage_location")"""
