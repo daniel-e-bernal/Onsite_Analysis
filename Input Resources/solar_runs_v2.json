@@ -24,14 +24,14 @@
     "ElectricTariff": {
         "blended_annual_energy_rate": 1000.00,
         
-        "wholesale_rate": 0,
-        "export_rate_beyond_net_metering_limit": 0
+        "wholesale_rate": 0.10,
+        "export_rate_beyond_net_metering_limit": 0.10
     },
     "ElectricUtility": { 
         "net_metering_limit_kw": 0,
         "cambium_location_type": "GEA Regions",
         "cambium_levelization_years": 1,
-        "cambium_metric_col": "srmer_co2e_c",
+        "cambium_metric_col": "aer_gen_co2e_c", 
         "cambium_scenario": "Mid-case",
         "cambium_grid_level": "enduse"
     }

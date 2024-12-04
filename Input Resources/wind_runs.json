@@ -1,5 +1,6 @@
 {
     "Settings":{  
+      "solver_name": "Xpress"
     },
     "Site": { 
     },
@@ -12,5 +13,11 @@
     "ElectricTariff": {
     },
     "ElectricUtility": { 
+      "net_metering_limit_kw": 0,
+      "cambium_location_type": "GEA Regions",
+      "cambium_levelization_years": 1,
+      "cambium_metric_col": "srmer_co2e_c",
+      "cambium_scenario": "Mid-case",
+      "cambium_grid_level": "enduse"
     }
   }
