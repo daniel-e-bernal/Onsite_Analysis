@@ -1,4 +1,4 @@
-"""Ready for use"""
+"""Ready for use -- but not final version. Go to "tests_v2.jl" to see final version."""
 
 using DataFrames
 using Statistics
@@ -357,7 +357,7 @@ function read_csv_parcel_file(file_path::String)
 end
 
 #Set-up inputs file for PV runs 
-data_file = "solar_runs_v2.json"
+data_file = "solar_runs.json"
 input_data = JSON.parsefile("./Input Resources/$data_file")
 
 #parcel file path in IEDO Teams 
@@ -371,7 +371,7 @@ load_traits_text = "Load Facility Traits Set"
 load_data_text = "Load Facility Set"
 
 #establish number of runs 
-number_of_runs = collect(1:50)
+number_of_runs = collect(1:2)
 
 #store results
 analysis_runs = []
@@ -712,7 +712,7 @@ summer_solstice_hour = closest_first_hour_of_sunday(summer_solstice_hours)
 winter_solstice_hours = get_hour_interval(12, 21)
 winter_solstice_hour = closest_first_hour_of_sunday(winter_solstice_hours)
 
-iters = length(data[!, :latitude])
+iters = length(analysis_runs)
 #iters = 1
 num_runs = collect(1:iters)
 plots_iter = eachindex(num_runs)
@@ -772,7 +772,7 @@ for i in plots_iter
         color=:black, #load profile
         linestyle=:dash
     )
-    savefig(plots_dir_summer * "$(place_name)_naics_$(naics_code)_summer" )
+    #savefig(plots_dir_summer * "$(place_name)_naics_$(naics_code)_summer" )
     println("Completed summer plotting figure #$i")
 
     consumption_winter_week = inputs_all[i]["s"]["electric_load"]["loads_kw"][winter_week_start:winter_week_end]
@@ -802,7 +802,7 @@ for i in plots_iter
         color=:black, #load profile
         linestyle=:dash
     )
-    savefig(plots_dir_winter * "$(place_name)_naics_$(naics_code)_winter" )
+    #savefig(plots_dir_winter * "$(place_name)_naics_$(naics_code)_winter" )
     println("Completed winter plotting figure #$i")
 
 end
