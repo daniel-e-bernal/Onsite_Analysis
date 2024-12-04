@@ -685,8 +685,8 @@ df = DataFrame(
     input_PV_ground_tilt = [input_data_dic[i]["PV"][1]["tilt"] for i in sites_iter],
     input_PV_ground_power_density = [input_data_dic[i]["PV"][1]["acres_per_kw"] for i in sites_iter],
     PV_size_kw_ground = [round(input_data_dic[i]["PV"][1]["max_kw"], digits=4) for i in sites_iter],
-    #PV_annual_kwh_energy_production_avg_ground = [round.(analysis_runs[sites_iter, :PV_ground_production_total], digits=0)],
-    PV_max_possible_size_kw_ground = [round(inputs_all[i]["max_sizes"]["ground_mount"], digits=4) for i in sites_iter],
+    PV_annual_kwh_energy_production_avg_ground = (round.(analysis_runs[sites_iter, :PV_ground_production_total], digits=0)),
+    PV_max_possible_size_kw_ground = (round(inputs_all[i]["max_sizes"]["ground_mount"], digits=4) for i in sites_iter),
     #roof PV inputs
     input_PV_roof_location = [input_data_dic[i]["PV"][2]["location"] for i in sites_iter],
     input_PV_array_type_roof = [input_data_dic[i]["PV"][2]["array_type"] for i in sites_iter],
@@ -694,23 +694,23 @@ df = DataFrame(
     input_PV_roof_tilt = [input_data_dic[i]["PV"][2]["tilt"] for i in sites_iter],
     input_PV_roof_power_density = [input_data_dic[i]["PV"][2]["kw_per_square_foot"] for i in sites_iter],
     PV_size_kw_roof = [round(input_data_dic[i]["PV"][2]["max_kw"], digits=4) for i in sites_iter],
-    PV_annual_kwh_energy_production_avg_roof = [round.(analysis_runs[sites_iter, :PV_roof_production_total], digits=0)],
+    PV_annual_kwh_energy_production_avg_roof = (round.(analysis_runs[sites_iter, :PV_roof_production_total], digits=0)),
     PV_max_possible_size_kw_roof = [round(inputs_all[i]["max_sizes"]["roof_fixed"], digits=4) for i in sites_iter],
     #total metrics 
-    PV_energy_exported_total = [round.(analysis_runs[sites_iter, :PV_export_total_kwh], digits=0)],
-    PV_annual_kwh_energy_production_avg_total = [round.(analysis_runs[sites_iter, :PV_production_total], digits=0)],
-    PV_serving_total_load_kwh = [round.(analysis_runs[sites_iter, :PV_serving_load_kwh_total], digits=0)],
+    PV_energy_exported_total = (round.(analysis_runs[sites_iter, :PV_export_total_kwh], digits=0)),
+    PV_annual_kwh_energy_production_avg_total = (round.(analysis_runs[sites_iter, :PV_production_total], digits=0)),
+    PV_serving_total_load_kwh = (round.(analysis_runs[sites_iter, :PV_serving_load_kwh_total], digits=0)),
     #all other metrics
-    Grid_Electricity_Supplied_kWh_annual = [round.(analysis_runs[sites_iter, :annual_grid_supplied_kwh], digits=0)],
-    BAU_Total_Annual_Emissions_CO2e_aer_gen = [round.(emissions[sites_iter, :BAU_emissions_aer_gen_co2e_c_wo_tech], digits=4)],
-    emissions_srmer_delta_w_tech = [round.(emissions[sites_iter, :emissions_srmer_from_tech], digits=4)],
-    Total_Annual_Emissions_CO2_aer_gen_minus_srmer_w_tech = [round.(emissions[sites_iter, :RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech], digits=4)],
-    LifeCycle_Emission_Reduction_Fraction_aer_srmer = [round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_aer_srmer_emissions_w_tech], digits=2)],
-    Total_Annual_Emissions_CO2_aer_gen_w_tech = [round.(emissions[sites_iter, :RESULT_BAU_emissions_aer_minus_aer_emissions_w_tech], digits=4)],
-    LifeCycle_Emission_Reduction_Fraction_aer_aer = [round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_aer_aer_emissions_w_tech], digits=2)],
-    BAU_Total_Annual_Emissions_CO2e_srmer = [round.(emissions[sites_iter, :BAU_emissions_srmer_co2e_wo_tech], digits=4)],
-    Total_Annual_Emissions_CO2_srmer_w_tech = [round.(emissions[sites_iter, :RESULT_bau_emissions_srmer_minus_srmer_emissions_w_tech ], digits=4)],
-    LifeCycle_Emission_Reduction_Fraction_srmer_srmer = [round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_srmer_srmer_emissions_w_tech], digits=2)]
+    Grid_Electricity_Supplied_kWh_annual = (round.(analysis_runs[sites_iter, :annual_grid_supplied_kwh], digits=0)),
+    BAU_Total_Annual_Emissions_CO2e_aer_gen = (round.(emissions[sites_iter, :BAU_emissions_aer_gen_co2e_c_wo_tech], digits=4)),
+    emissions_srmer_delta_w_tech = (round.(emissions[sites_iter, :emissions_srmer_from_tech], digits=4)),
+    Total_Annual_Emissions_CO2_aer_gen_minus_srmer_w_tech = (round.(emissions[sites_iter, :RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech], digits=4)),
+    LifeCycle_Emission_Reduction_Fraction_aer_srmer = (round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_aer_srmer_emissions_w_tech], digits=2)),
+    Total_Annual_Emissions_CO2_aer_gen_w_tech = (round.(emissions[sites_iter, :RESULT_BAU_emissions_aer_minus_aer_emissions_w_tech], digits=4)),
+    LifeCycle_Emission_Reduction_Fraction_aer_aer = (round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_aer_aer_emissions_w_tech], digits=2)),
+    BAU_Total_Annual_Emissions_CO2e_srmer = (round.(emissions[sites_iter, :BAU_emissions_srmer_co2e_wo_tech], digits=4)),
+    Total_Annual_Emissions_CO2_srmer_w_tech = (round.(emissions[sites_iter, :RESULT_bau_emissions_srmer_minus_srmer_emissions_w_tech ], digits=4)),
+    LifeCycle_Emission_Reduction_Fraction_srmer_srmer = (round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_srmer_srmer_emissions_w_tech], digits=2))
 )
 println(df)
 
