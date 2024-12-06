@@ -797,33 +797,17 @@ function tech_potential_reopt(;
     )
     println(df)
 
-    # Define path to xlsx file
-    file_storage_location = "./results/validation_run_results.xlsx"
+    # Define path to csv file
+    file_storage_location = "./results/run_result_batch_num_$batch_number.csv"
 
-    # Check if the Excel file already exists
+    # Write DataFrame to a new or existing CSV file
     if isfile(file_storage_location)
-        # Open the Excel file in read-write mode
-        XLSX.openxlsx(file_storage_location, mode="rw") do xf
-            counter = 0
-            while true
-                sheet_name = "Results_$(batch_number)_" * string(counter)
-                try
-                    sheet = xf[sheet_name]
-                    counter += 1
-                catch
-                    break
-                end
-            end
-            sheet_name = "Results_$(batch_number)_" * string(counter)
-            # Add new sheet
-            XLSX.addsheet!(xf, sheet_name)
-            # Write DataFrame to the new sheet
-            XLSX.writetable!(xf[sheet_name], df)
+        # Append new data to the CSV file
+        open(file_storage_location, "a") do io
+            CSV.write(io, df, header=false)  # Append without headers
         end
     else
-        # Write DataFrame to a new Excel file
-        XLSX.writetable!(file_storage_location, df)
+        # Write DataFrame to a new CSV file
+        CSV.write(file_storage_location, df)
     end
-
-    println("Successful write into XLSX file: file_storage_location")
 end
