@@ -371,7 +371,7 @@ load_traits_text = "Load Facility Traits Set"
 load_data_text = "Load Facility Set"
 
 #establish number of runs 
-number_of_runs = collect(1:2)
+number_of_runs = collect(1:10)
 
 #store results
 analysis_runs = []
@@ -458,7 +458,6 @@ for i in sites_iter
     println("Max size for PV on roof (kW) based on annual load is: ", PV_roof_max_size_based_on_load)
     #now getting max size based on space
     PV_ground_max_size_based_on_space = inputs.max_sizes["ground_mount"] #max size based on space
-    #PV_roof_max_size_based_on_space = inputs.max_sizes["roof_fixed"]  #max size based on space
     PV_roof_max_size_based_n_space = inputs.max_sizes["roof_fixed"]
     println("Max size for PV on ground (kW) based on ground space is: ", PV_ground_max_size_based_on_space)
     println("Max size for PV on roof (kW) based on roof space: ", PV_roof_max_size_based_n_space)

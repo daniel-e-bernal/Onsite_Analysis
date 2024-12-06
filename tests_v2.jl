@@ -370,7 +370,7 @@ load_traits_text = "Load Facility Traits Set"
 load_data_text = "Load Facility Set"
 
 #establish number of runs 
-number_of_runs = collect(1:2)
+number_of_runs = collect(1:50)
 
 #store results
 analysis_runs = DataFrame()
@@ -438,7 +438,7 @@ for i in sites_iter
     for name in [1, 2] #["ground_mount", "roof_fixed"]
         if input_data_site["PV"][name]["name"] == "ground_mount"
             #assign over 1 MW threshold of changing from ground mount FIXED to ground mount one-axis tracking 
-            input_data_site["PV"][name]["array_type"] = land_acres < 6 ? 0 : 2 #if over 6 acres one-axis tracking
+            input_data_site["PV"][name]["array_type"] = land_acres < 4.2 ? 0 : 2 #if over 6 acres one-axis tracking
             array_type_i = input_data_site["PV"][name]["array_type"]
             #println(array_type_i)
             input_data_site["PV"][name]["acres_per_kw"] = power_density(array_type=array_type_i)
@@ -461,36 +461,34 @@ for i in sites_iter
             input_data_site["PV"][name]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
         end
     end
+    println("The power density for ground mounted PV is: ", input_data_site["PV"][1]["acres_per_kw"])
     
     """ Below is attaining the REopt inputs related to aer_gen_co2e_c emissions to calculate BAU emissions."""
-    s = Scenario(input_data_site)
-    inputs = REoptInputs(s)
-    bau_inputs1 = REopt.BAUInputs(inputs)
-
-    BAU_emissions_aer_total = bau_inputs1.s.site.bau_emissions_lb_CO2_per_year #this is an aggregate total 
-    println("The total BAU emissions is: ", BAU_emissions_aer_total)
-    BAU_emissions_aer_series = bau_inputs1.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh #this is an 8760 series 
-    println("The object type of BAU_emissions_aer_series is a ", typeof(BAU_emissions_aer_series))
+    input_data_site["ElectricUtility"]["cambium_metric_col"] = "aer_gen_co2e_c"
+    s1 = Scenario(input_data_site)
+    inputs1 = REoptInputs(s1)
 
     #getting max size based on annual load (using capacity factor)
-    PV_prod_data = inputs.production_factor
+    PV_prod_data = inputs1.production_factor
     PV_ground_capacity_factor = sum(PV_prod_data["ground_mount", :]) / 8760 #actual capacity factor
     PV_roof_capacity_factor = sum(PV_prod_data["roof_fixed", :]) / 8760 #actual capacity factor
     PV_ground_max_size_based_on_load = input_data_site["ElectricLoad"]["annual_kwh"] / (PV_ground_capacity_factor * 8760)
     PV_roof_max_size_based_on_load = input_data_site["ElectricLoad"]["annual_kwh"] / (PV_roof_capacity_factor * 8760)
-    println("Max size for PV on ground (kW) based on annual load is: ", PV_ground_max_size_based_on_load)
-    println("Max size for PV on roof (kW) based on annual load is: ", PV_roof_max_size_based_on_load)
+    println("Max size for PV on ground (kW) based on annual load for # $i is: ", PV_ground_max_size_based_on_load)
+    println("Max size for PV on roof (kW) based on annual load for # $i is: ", PV_roof_max_size_based_on_load)
     #now getting max size based on space
-    PV_ground_max_size_based_on_space = inputs.max_sizes["ground_mount"] #max size based on space
-    PV_roof_max_size_based_n_space = inputs.max_sizes["roof_fixed"]
-    println("Max size for PV on ground (kW) based on ground space is: ", PV_ground_max_size_based_on_space)
-    println("Max size for PV on roof (kW) based on roof space: ", PV_roof_max_size_based_n_space)
+    PV_ground_max_size_based_on_space = land_acres * (1/PV_ground_power_density) #inputs1.max_sizes["ground_mount"] #max size based on space 
+    PV_roof_max_size_based_n_space = roof_space * (PV_roof_power_density) #inputs1.max_sizes["roof_fixed"] #max size based on space 
+    println("Max size for PV on ground (kW) based on ground space for # $i is: ", PV_ground_max_size_based_on_space)
+    println("Max size for PV on roof (kW) based on roof space for # $i is: ", PV_roof_max_size_based_n_space)
+    inputs1.max_sizes["ground_mount"] = PV_ground_max_size_based_on_space
+    inputs1.max_sizes["roof_fixed"] = PV_roof_max_size_based_n_space
     #create global variables for PV sizes on roof and ground 
     roof_PV_size = 0
     ground_PV_size = 0
     #now re-set the sizes for PV on the roof and ground, with roof as the priority
     if PV_roof_max_size_based_on_load <= PV_roof_max_size_based_n_space
-        println("PV roof max size based on load is less than or equal to PV max size based on space.")
+        println("PV roof max size based on load for # $i is less than or equal to PV max size based on space.")
         input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_on_load * 0.99
         roof_PV_size = PV_roof_max_size_based_on_load
         input_data_site["PV"][2]["max_kw"] = roof_PV_size
@@ -498,7 +496,7 @@ for i in sites_iter
         ground_PV_size_remainder = 0 
         input_data_site["PV"][1]["max_kw"] = ground_PV_size_remainder
     elseif PV_roof_max_size_based_on_load > PV_roof_max_size_based_n_space
-        println("PV roof max size based on load is greater than PV max size based on space.")
+        println("PV roof max size based on load for # $i is greater than PV max size based on space.")
         #fix the minimum kW for the roof 
         input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.99
         #identify the max kW for ground remainder after knowing the total load 
@@ -511,7 +509,7 @@ for i in sites_iter
         println("Assinged max ground PV size (kW): ", ground_PV_size)
         input_data_site["PV"][1]["min_kw"] = ground_PV_size * 0.99
 
-        input_data_site["PV"][1]["array_type"] = ground_PV_size <= 1000 ? 0 : 2 #if over 1 MW -> 2, one-axis tracking
+        input_data_site["PV"][1]["array_type"] = ground_PV_size <= 1356 ? 0 : 2 #if over 1 MW -> 2, one-axis tracking
         array_type_i = input_data_site["PV"][1]["array_type"]
         println("The array type is: ", array_type_i)
 
@@ -522,7 +520,7 @@ for i in sites_iter
         input_data_site["PV"][1]["gcr"] = gcr_pv
         input_data_site["PV"][1]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
     else 
-        println("Issue with assigning values to roof and ground PV.")
+        println("Issue with assigning values to roof and ground PV for # $i.")
     end
     """ Below is attaining the REopt inputs related to srmer_co2e_c emissions to calculate BAU emissions."""
 
@@ -530,22 +528,17 @@ for i in sites_iter
     
     s2 = Scenario(input_data_site)
     inputs2 = REoptInputs(s2)
-    bau_inputs2 = REopt.BAUInputs(inputs2)
-
-    BAU_emissions_srmer_total = bau_inputs2.s.site.bau_emissions_lb_CO2_per_year #this is an aggregate total 
-    BAU_emissions_srmer_series = bau_inputs2.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh #this is an 8760 series
-    println("The object type of BAU_emissions_srmer_series is a ", typeof(BAU_emissions_srmer_series))
 
     #will get PV related and necessary variables 
     PV_ground_prod_factor_series = inputs2.production_factor["ground_mount",:].data #this gets the production factor series for the ground PV
-    println("The object type of PV_ground_prod_factor_series is: ", typeof(PV_ground_prod_factor_series))
+    println("The object type of PV_ground_prod_factor_series for # $i is: ", typeof(PV_ground_prod_factor_series))
     PV_roof_prod_factor_series = inputs2.production_factor["roof_fixed", :].data #this gets the production factor series for the roof PV 
-    println("The set PV ground size (kW) is: ", ground_PV_size)
-    println("The set PV roof size (kW) is: ", roof_PV_size)
+    println("The set PV ground size (kW) for # $i is: ", ground_PV_size)
+    println("The set PV roof size (kW) for # $i is: ", roof_PV_size)
     PV_ground_prod_kwh_series = PV_ground_prod_factor_series * ground_PV_size
     PV_roof_prod_kwh_series = PV_roof_prod_factor_series * roof_PV_size
     PV_production_total_kwh_series = PV_ground_prod_kwh_series + PV_roof_prod_kwh_series
-    println("The object type of PV_ground_prod_kwh_series is a ", typeof(PV_ground_prod_kwh_series))
+    println("The object type of PV_ground_prod_kwh_series for # $i is a ", typeof(PV_ground_prod_kwh_series))
     PV_ground_load_minus_prod_kwh_series = load_vector - PV_ground_prod_kwh_series
     PV_roof_load_minus_prod_kwh_series = load_vector - PV_roof_prod_kwh_series
     PV_load_minus_total_prod_kwh_series = load_vector - (PV_roof_prod_kwh_series + PV_ground_prod_kwh_series)
@@ -596,8 +589,20 @@ for i in sites_iter
         PV_export_series_kwh = [PV_total_export_kwh_series],
         annual_grid_supplied_kwh = sum(grid_supplied_kwh),
         grid_supplied_kwh_series = [grid_supplied_kwh],
+        PV_serving_load_kwh_series = [PV_serving_load_total_series],
         PV_serving_load_kwh_total = sum(PV_serving_load_total_series)
     ))
+
+    bau_inputs1 = REopt.BAUInputs(inputs1)
+
+    BAU_emissions_aer_total = bau_inputs1.s.site.bau_emissions_lb_CO2_per_year #this is an aggregate total 
+    println("The total BAU emissions for # $i is: ", BAU_emissions_aer_total)
+    BAU_emissions_aer_series = bau_inputs1.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh #this is an 8760 series 
+
+    bau_inputs2 = REopt.BAUInputs(inputs2)
+
+    BAU_emissions_srmer_total = bau_inputs2.s.site.bau_emissions_lb_CO2_per_year #this is an aggregate total 
+    BAU_emissions_srmer_series = bau_inputs2.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh #this is an 8760 series
 
     #now get the total aer emissions based on PV ground and roof sizes (kW) and prod factor series and emissions series
     #aer_emissions_delta = sum((BAU_emissions_aer_series * PV_ground_prod_kwh_series) + (BAU_emissions_aer_series * PV_roof_prod_kwh_series))
@@ -649,8 +654,8 @@ end
 println("Completed optimization")
 
 #write results onto JSON file
-#write.("./results/PV_results.json", JSON.json(analysis_runs))
-#println("Successfully printed results on JSON file")
+write.("./results/PV_results.json", JSON.json(analysis_runs))
+println("Successfully printed results on JSON file")
 #write inputs onto JSON file
 write.("./results/inputs_PV_onsite_analysis.json", JSON.json(input_data_dic))
 println("Successfully printed data site inputs onto JSON dictionary file")
@@ -686,7 +691,7 @@ df = DataFrame(
     input_PV_ground_power_density = [input_data_dic[i]["PV"][1]["acres_per_kw"] for i in sites_iter],
     PV_size_kw_ground = [round(input_data_dic[i]["PV"][1]["max_kw"], digits=4) for i in sites_iter],
     PV_annual_kwh_energy_production_avg_ground = (round.(analysis_runs[sites_iter, :PV_ground_production_total], digits=0)),
-    PV_max_possible_size_kw_ground = (round(inputs_all[i]["max_sizes"]["ground_mount"], digits=4) for i in sites_iter),
+    PV_max_possible_size_kw_ground = [round(inputs_all[i]["max_sizes"]["ground_mount"], digits=4) for i in sites_iter],
     #roof PV inputs
     input_PV_roof_location = [input_data_dic[i]["PV"][2]["location"] for i in sites_iter],
     input_PV_array_type_roof = [input_data_dic[i]["PV"][2]["array_type"] for i in sites_iter],
@@ -702,14 +707,14 @@ df = DataFrame(
     PV_serving_total_load_kwh = (round.(analysis_runs[sites_iter, :PV_serving_load_kwh_total], digits=0)),
     #all other metrics
     Grid_Electricity_Supplied_kWh_annual = (round.(analysis_runs[sites_iter, :annual_grid_supplied_kwh], digits=0)),
-    BAU_Total_Annual_Emissions_CO2e_aer_gen = (round.(emissions[sites_iter, :BAU_emissions_aer_gen_co2e_c_wo_tech], digits=4)),
-    emissions_srmer_delta_w_tech = (round.(emissions[sites_iter, :emissions_srmer_from_tech], digits=4)),
-    Total_Annual_Emissions_CO2_aer_gen_minus_srmer_w_tech = (round.(emissions[sites_iter, :RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech], digits=4)),
+    BAU_Total_Annual_Emissions_lbs_CO2e_aer_gen = (round.(emissions[sites_iter, :BAU_emissions_aer_gen_co2e_c_wo_tech], digits=4)),
+    emissions_srmer_delta_lbs_CO2e_w_tech = (round.(emissions[sites_iter, :emissions_srmer_from_tech], digits=4)),
+    Total_Annual_Emissions_lbs_CO2_aer_gen_minus_srmer_w_tech = (round.(emissions[sites_iter, :RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech], digits=4)),
     LifeCycle_Emission_Reduction_Fraction_aer_srmer = (round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_aer_srmer_emissions_w_tech], digits=2)),
-    Total_Annual_Emissions_CO2_aer_gen_w_tech = (round.(emissions[sites_iter, :RESULT_BAU_emissions_aer_minus_aer_emissions_w_tech], digits=4)),
+    Total_Annual_Emissions_lbs_CO2_aer_gen_w_tech = (round.(emissions[sites_iter, :RESULT_BAU_emissions_aer_minus_aer_emissions_w_tech], digits=4)),
     LifeCycle_Emission_Reduction_Fraction_aer_aer = (round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_aer_aer_emissions_w_tech], digits=2)),
-    BAU_Total_Annual_Emissions_CO2e_srmer = (round.(emissions[sites_iter, :BAU_emissions_srmer_co2e_wo_tech], digits=4)),
-    Total_Annual_Emissions_CO2_srmer_w_tech = (round.(emissions[sites_iter, :RESULT_bau_emissions_srmer_minus_srmer_emissions_w_tech ], digits=4)),
+    BAU_Total_Annual_Emissions_lbs_CO2e_srmer = (round.(emissions[sites_iter, :BAU_emissions_srmer_co2e_wo_tech], digits=4)),
+    Total_Annual_Emissions_lbs_CO2_srmer_w_tech = (round.(emissions[sites_iter, :RESULT_bau_emissions_srmer_minus_srmer_emissions_w_tech ], digits=4)),
     LifeCycle_Emission_Reduction_Fraction_srmer_srmer = (round.(emissions[sites_iter, :PERCENT_CHANGE_from_bau_emissions_srmer_srmer_emissions_w_tech], digits=2))
 )
 println(df)
@@ -747,7 +752,7 @@ println("Successful write into XLSX file: file_storage_location")
 """
 Below we will plot the graphs of energy production over load.
 """
-"""
+
 month_days = [
     31, #January
     28, #February
@@ -832,8 +837,8 @@ summer_solstice_hour = closest_first_hour_of_sunday(summer_solstice_hours)
 winter_solstice_hours = get_hour_interval(12, 21)
 winter_solstice_hour = closest_first_hour_of_sunday(winter_solstice_hours)
 
-iters = length(analysis_runs)
-#iters = 1
+iters = length(analysis_runs[!, :MatchID])
+
 num_runs = collect(1:iters)
 plots_iter = eachindex(num_runs)
 for i in plots_iter
@@ -850,7 +855,7 @@ for i in plots_iter
     x_winter = collect(winter_week_start:winter_week_end)
 
     consumption = sum(inputs_all[i]["s"]["electric_load"]["loads_kw"])
-    production_aggregate = sum(analysis_runs[i][2]["PV"][1]["electric_to_load_series_kw"] + analysis_runs[i][2]["PV"][2]["electric_to_load_series_kw"])
+    production_aggregate = analysis_runs[!, :PV_serving_load_kwh_total][i]
     condition = consumption/production_aggregate #across the entire year, not necessarily just the summer solstice or winter solstice week
     if condition <= 0.10
         plots_dir_summer = meets_10_summer
@@ -867,7 +872,7 @@ for i in plots_iter
 
     consumption_summer_week = inputs_all[i]["s"]["electric_load"]["loads_kw"][summer_week_start:summer_week_end]
     #println("The type of object is ", typeof(consumption_summer_week))
-    production = analysis_runs[i][2]["PV"][1]["electric_to_load_series_kw"] + analysis_runs[i][2]["PV"][2]["electric_to_load_series_kw"]
+    production = analysis_runs[!, :PV_serving_load_kwh_series][i]
     #println("The type of object is ", typeof(production))
     production_summer_week = production[summer_week_start:summer_week_end]
     #println("The type of object is ", typeof(production_summer_week))
@@ -875,7 +880,7 @@ for i in plots_iter
     plot(
         x_summer,
         production_summer_week,
-        label="Production",
+        label="PV Serving Load",
         fillalpha=0.3,
         seriestype=:shape,
         color=:blue, #PV roof and ground production
@@ -897,7 +902,7 @@ for i in plots_iter
 
     consumption_winter_week = inputs_all[i]["s"]["electric_load"]["loads_kw"][winter_week_start:winter_week_end]
     #println("The type of object is ", typeof(consumption_summer_week))
-    production = analysis_runs[i][2]["PV"][1]["electric_to_load_series_kw"] + analysis_runs[i][2]["PV"][2]["electric_to_load_series_kw"]
+    production = analysis_runs[!, :PV_serving_load_kwh_series][i]
     #println("The type of object is ", typeof(production))
     production_winter_week = production[winter_week_start:winter_week_end]
     #println("The type of object is ", typeof(production_summer_week))
@@ -905,7 +910,7 @@ for i in plots_iter
     plot(
         x_winter,
         production_winter_week,
-        label="Production",
+        label="PV Serving Load",
         fillalpha=0.3, #transparency for the fill 
         seriestype=:shape, #fills the area below the curve
         color=:blue, #PV roof and ground production
