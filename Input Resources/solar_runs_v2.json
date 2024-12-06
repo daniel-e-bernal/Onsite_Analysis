@@ -34,5 +34,11 @@
         "cambium_metric_col": "aer_gen_co2e_c", 
         "cambium_scenario": "Mid-case",
         "cambium_grid_level": "enduse"
+    },
+    "DomesticHotWaterLoad" :{
+        
+    },
+    "ExistingBoiler":{
+        "fuel_cost_per_mmbtu": 10
     }
 }
