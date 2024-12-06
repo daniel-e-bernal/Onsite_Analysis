@@ -292,7 +292,8 @@ end
 
 function get_load_data(;
     match_id::Any,
-    folder_path::String,
+    folder_path_e::String, #the electric loads folder path
+    folder_path_ng::String, #the ng loads folder path
     traits_file::String = "Load Facility Traits Set ",
     set_file::String = "Load Profiles Set ")
     
@@ -317,11 +318,13 @@ function get_load_data(;
         end
 
         #we get the traits path first 
-        file_path_t = joinpath(folder_path, "$traits_file$(string(counter)).csv")
-        file_t = CSV.read(file_path_t, DataFrame)
-
-        #find the MatchID in the file
-        find_match_id_row = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_t)
+        file_path_e = joinpath(folder_path_e, "$traits_file$(string(counter)).csv")
+        file_e = CSV.read(file_path_e, DataFrame)
+        file_path_ng = joinpath(folder_path_ng, "Manufacturing Parcel Data - Natural Gas Estimates.csv")
+        file_ng = CSV.read(file_path_ng, DataFrame)
+        electric_estimated_or_random = []
+        #find the MatchID in the electric loads file 
+        find_match_id_row = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_e)
         if isempty(find_match_id_row)
             println("Got stuck trying to find a match file", counter)
             counter += 1
@@ -329,15 +332,33 @@ function get_load_data(;
         else #so if a match was found 
             simu_id = find_match_id_row.simulationID[1]
             simu_id = lpad(simu_id, 6, '0')
-            println("Got the simu_id = ", simu_id)
+            estimated_or_real = find_match_id_row.energy_estimated_or_random[i]
+            append!(electric_estimated_or_random, estimated_or_real)
+            println("Got the simu_id = ", simu_id, " and load is ", estimated_or_real)
+        end
+        ng_load = []
+        ng_estimated_or_random = []
+        #find the MatchID in the natural gas file
+        find_match_id_row_ng = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_ng)
+        if isempty(find_match_id_row_ng)
+            println("Did not find a MatchID for the natural gas consumption.")
+            append!(ng_load, 0)
+            append!(ng_estimated_or_random, "NaN")
+        else #so if a match was found 
+            annual_ng_mmbtu = find_match_id_row_ng.Estimated_Annual_Natural_Gas_MMBtu
+            estimated_or_real_ng = find_match_id_row_ng.Natural_Gas_Estimated_E_or_Random_R[i]
+            append!(ng_load, annual_ng_mmbtu)
+            append!(ng_estimated_or_random, estimated_or_real_ng)
+            println("Got the simu_id = ", simu_id, " and load is ", estimated_or_real)
         end
 
         #get the file path for the set file that contains the hourly loads 
         file_path_s = joinpath(folder_path, "$set_file$(string(counter)).csv")
         file_s = CSV.read(file_path_s, DataFrame)
-        hourly_load = []
-        append!(hourly_load, file_s[!, simu_id])
-        return hourly_load
+        electric_hourly_load = []
+        electric_estimated_or_random = []
+        append!(electric_hourly_load, file_s[!, simu_id])
+        return electric_hourly_load, electric_estimated_or_random, ng_load, ng_estimated_or_random
     end
 end
 #columns to select from csv file for parcel data
@@ -368,6 +389,7 @@ data = read_csv_parcel_file(parcel_file)
 electric_load_folder_path = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/Facility Load Profiles/"
 load_traits_text = "Load Facility Traits Set"
 load_data_text = "Load Facility Set"
+ng_load_folder_path = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/Industrial Facility Annual Energy Consumption Estimates/"
 
 #establish number of runs 
 number_of_runs = collect(1:50)
@@ -419,7 +441,7 @@ for i in sites_iter
     
     #get MatchID in data DataFrame to start getting other data from loads 
     match_id = data[!, :MatchID][i]
-    load_vector = get_load_data(match_id=match_id, folder_path=electric_load_folder_path)
+    load_vector = get_load_data(match_id=match_id, folder_path_e=electric_load_folder_path, folder_path_ng=ng_load_folder_path)[1]
     println(typeof(load_vector))
 
     input_data_site["ElectricLoad"]["loads_kw"] = load_vector
