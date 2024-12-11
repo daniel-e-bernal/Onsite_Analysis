@@ -10,10 +10,6 @@ using Distributions
 using StatsBase
 using JSON
 using JuMP
-using Xpress
-using Plots
-
-batch_number = 1
 
 # Function to safely extract values from JSON with default value if key is missing
 function safe_get(data::Dict{String, Any}, keys::Vector{String}, default::Any=0)
@@ -374,6 +370,7 @@ function read_csv_parcel_file(file_path::String)
     df = df[df.state .!= "AK", :]
     df = df[.!ismissing.(df.latitude), :]
     df = df[.!isnan.(df.latitude), :]
+    df = df[.!ismissing.(df.MatchID), :]
     return df 
 end
 
@@ -383,33 +380,35 @@ load_traits_text = "Load Facility Traits Set"
 load_data_text = "Load Facility Set"
 ng_load_folder_path = "/projects/iedo00onsite/data/facility_annual_energy_consumption/"
 
-"""Function start here"""
 """
-    Make below a single function with inputs: A) number of sites, B) index start, and C) batch number
-    """
+Make below a single function with inputs: A) number of sites, B) index start, and C) batch number
+"""
 function tech_potential_reopt(;
     num_sites::Int,
     index_start::Int,
     batch_number::Int
     )
+    ENV["NREL_DEVELOPER_API_KEY"] = "gAXbkyLjfTFEFfiO3YhkxxJ6rkufRaSktk40ho4x"
     #Set-up inputs file for PV runs 
     data_file = "solar_runs_v2.json"
-    input_data = JSON.parsefile("./Input Resources/$data_file")
+    input_data = JSON.parsefile("./inputs/$data_file")
 
     #parcel file path in IEDO Teams 
     parcel_file = "/projects/iedo00onsite/data/pnnl_parcel_land_coverage_data/updated_11_27_2024/LC_facility_parcels_NREL_11_27.csv"
     #get data from CSV file for parcel data 
     data = read_csv_parcel_file(parcel_file)
     end_run = index_start + num_sites
+    #only get the data you need 
+    data = data[index_start:end_run, :]
     #establish number of runs 
-    number_of_runs = collect(index_start:end_run)
+    sites_iter = collect(index_start:end_run)
     #store results
     analysis_runs = DataFrame()
     input_data_dic = [] #to store the input_data_site
     input_REopt_dic = [] #to store the inputs = REoptinputs(s)
     emissions = DataFrame() 
-    
-    for i in number_of_runs
+    sites_iter = eachindex(sites_iter)
+    for i in sites_iter
         input_data_site = copy(input_data)
 
         #get the standard inputs 
@@ -423,13 +422,22 @@ function tech_potential_reopt(;
         longitude = convert_string_to_float(longitude)
         #conversion for land_acres
         land_acres = data[!, :solarPV_ground_area][i]
-        land_acres = round(land_acres / 4046.86, digits=4) #conversion from m2 to acres
+        if ismissing(land_acres) || isnan(land_acres)
+            land_acres = 0
+        else 
+            land_acres = round(land_acres / 4046.86, digits=4) #conversion from m2 to acres
+        end
         #roofspace conversion
         roof_space = data[!, :rooftop_area_m2][i]
-        #roof_space = String(roof_space)
-        roof_space = convert_string_to_float(roof_space)
-        roof_space = round(roof_space / 10.7639, digits=4) #conversion from m2 to ft2
-        println("Got data from parcel file")
+        if ismissing(roof_space) || isnan(roof_space)
+            roof_space = 0
+        elseif isa(roof_space, String) 
+            roof_space = String(roof_space)
+            roof_space = convert_string_to_float(roof_space)
+            roof_space = round(roof_space / 10.7639, digits=4) #conversion from m2 to ft2
+        else 
+            roof_space = round(roof_space / 10.7639, digits=4) #conversion from m2 to ft2
+        end
         
         #get MatchID in data DataFrame to start getting other data from loads 
         match_id = data[!, :MatchID][i]
@@ -437,16 +445,16 @@ function tech_potential_reopt(;
         load_vector = site_load_info[1]
         #elec_load_estimation = site_load_info[2]
         
-        println(typeof(load_vector))
+        #println(typeof(load_vector))
         ng_annual_mmbtu = site_load_info[2]
-        println(typeof(ng_annual_mmbtu))
+        #println(typeof(ng_annual_mmbtu))
 
         input_data_site["ElectricLoad"]["loads_kw"] = load_vector
         input_data_site["ElectricLoad"]["annual_kwh"] = sum(load_vector)
-        println(input_data_site["ElectricLoad"]["annual_kwh"])
+        #println(input_data_site["ElectricLoad"]["annual_kwh"])
         #srmer_co2e_c <- for emissions reduction
         hourly_fuel = ng_annual_mmbtu[1] / 8760
-        hourly_fuel = fill(5.4, 8760)
+        hourly_fuel = fill(hourly_fuel, 8760)
         input_data_site["DomesticHotWaterLoad"]["fuel_loads_mmbtu_per_hour"] = hourly_fuel
 
         #set variables outside for loop
@@ -484,7 +492,7 @@ function tech_potential_reopt(;
                 input_data_site["PV"][name]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
             end
         end
-        println("The power density for ground mounted PV is: ", input_data_site["PV"][1]["acres_per_kw"])
+        #println("The power density for ground mounted PV is: ", input_data_site["PV"][1]["acres_per_kw"])
         
         """ Below is attaining the REopt inputs related to aer_gen_co2e_c emissions to calculate BAU emissions."""
         input_data_site["ElectricUtility"]["cambium_metric_col"] = "aer_gen_co2e_c"
@@ -497,13 +505,13 @@ function tech_potential_reopt(;
         PV_roof_capacity_factor = sum(PV_prod_data["roof_fixed", :]) / 8760 #actual capacity factor
         PV_ground_max_size_based_on_load = input_data_site["ElectricLoad"]["annual_kwh"] / (PV_ground_capacity_factor * 8760)
         PV_roof_max_size_based_on_load = input_data_site["ElectricLoad"]["annual_kwh"] / (PV_roof_capacity_factor * 8760)
-        println("Max size for PV on ground (kW) based on annual load for # $i is: ", PV_ground_max_size_based_on_load)
-        println("Max size for PV on roof (kW) based on annual load for # $i is: ", PV_roof_max_size_based_on_load)
+        #println("Max size for PV on ground (kW) based on annual load for # $i is: ", PV_ground_max_size_based_on_load)
+        #println("Max size for PV on roof (kW) based on annual load for # $i is: ", PV_roof_max_size_based_on_load)
         #now getting max size based on space
         PV_ground_max_size_based_on_space = land_acres * (1/PV_ground_power_density) #inputs1.max_sizes["ground_mount"] #max size based on space 
         PV_roof_max_size_based_n_space = roof_space * (PV_roof_power_density) #inputs1.max_sizes["roof_fixed"] #max size based on space 
-        println("Max size for PV on ground (kW) based on ground space for # $i is: ", PV_ground_max_size_based_on_space)
-        println("Max size for PV on roof (kW) based on roof space for # $i is: ", PV_roof_max_size_based_n_space)
+        #println("Max size for PV on ground (kW) based on ground space for # $i is: ", PV_ground_max_size_based_on_space)
+        #println("Max size for PV on roof (kW) based on roof space for # $i is: ", PV_roof_max_size_based_n_space)
         inputs1.max_sizes["ground_mount"] = PV_ground_max_size_based_on_space
         inputs1.max_sizes["roof_fixed"] = PV_roof_max_size_based_n_space
         #create global variables for PV sizes on roof and ground 
@@ -511,7 +519,7 @@ function tech_potential_reopt(;
         ground_PV_size = 0
         #now re-set the sizes for PV on the roof and ground, with roof as the priority
         if PV_roof_max_size_based_on_load <= PV_roof_max_size_based_n_space
-            println("PV roof max size based on load for # $i is less than or equal to PV max size based on space.")
+            #println("PV roof max size based on load for # $i is less than or equal to PV max size based on space.")
             input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_on_load * 0.99
             roof_PV_size = PV_roof_max_size_based_on_load
             input_data_site["PV"][2]["max_kw"] = roof_PV_size
@@ -519,22 +527,22 @@ function tech_potential_reopt(;
             ground_PV_size_remainder = 0 
             input_data_site["PV"][1]["max_kw"] = ground_PV_size_remainder
         elseif PV_roof_max_size_based_on_load > PV_roof_max_size_based_n_space
-            println("PV roof max size based on load for # $i is greater than PV max size based on space.")
+            #println("PV roof max size based on load for # $i is greater than PV max size based on space.")
             #fix the minimum kW for the roof 
             input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.99
             #identify the max kW for ground remainder after knowing the total load 
             roof_PV_size = PV_roof_max_size_based_n_space
             input_data_site["PV"][2]["max_kw"] = roof_PV_size
             ground_remainder = (PV_ground_max_size_based_on_load - roof_PV_size) >= PV_ground_max_size_based_on_space ? PV_ground_max_size_based_on_space : (PV_ground_max_size_based_on_load - roof_PV_size) 
-            println("The max size for ground: ", ground_remainder)
+            #println("The max size for ground: ", ground_remainder)
             input_data_site["PV"][1]["max_kw"] = ground_remainder
             ground_PV_size = input_data_site["PV"][1]["max_kw"]
-            println("Assinged max ground PV size (kW): ", ground_PV_size)
+            #println("Assinged max ground PV size (kW): ", ground_PV_size)
             input_data_site["PV"][1]["min_kw"] = ground_PV_size * 0.99
 
             input_data_site["PV"][1]["array_type"] = ground_PV_size <= 1356 ? 0 : 2 #if over 1 MW -> 2, one-axis tracking
             array_type_i = input_data_site["PV"][1]["array_type"]
-            println("The array type is: ", array_type_i)
+            #println("The array type is: ", array_type_i)
 
             input_data_site["PV"][1]["acres_per_kw"] = power_density(array_type=array_type_i)
             PV_ground_power_density =  input_data_site["PV"][1]["acres_per_kw"]
@@ -554,14 +562,14 @@ function tech_potential_reopt(;
 
         #will get PV related and necessary variables 
         PV_ground_prod_factor_series = inputs2.production_factor["ground_mount",:].data #this gets the production factor series for the ground PV
-        println("The object type of PV_ground_prod_factor_series for # $i is: ", typeof(PV_ground_prod_factor_series))
+        #println("The object type of PV_ground_prod_factor_series for # $i is: ", typeof(PV_ground_prod_factor_series))
         PV_roof_prod_factor_series = inputs2.production_factor["roof_fixed", :].data #this gets the production factor series for the roof PV 
-        println("The set PV ground size (kW) for # $i is: ", ground_PV_size)
-        println("The set PV roof size (kW) for # $i is: ", roof_PV_size)
+        #println("The set PV ground size (kW) for # $i is: ", ground_PV_size)
+        #println("The set PV roof size (kW) for # $i is: ", roof_PV_size)
         PV_ground_prod_kwh_series = PV_ground_prod_factor_series * ground_PV_size
         PV_roof_prod_kwh_series = PV_roof_prod_factor_series * roof_PV_size
         PV_production_total_kwh_series = PV_ground_prod_kwh_series + PV_roof_prod_kwh_series
-        println("The object type of PV_ground_prod_kwh_series for # $i is a ", typeof(PV_ground_prod_kwh_series))
+        #println("The object type of PV_ground_prod_kwh_series for # $i is a ", typeof(PV_ground_prod_kwh_series))
         PV_ground_load_minus_prod_kwh_series = load_vector - PV_ground_prod_kwh_series
         PV_roof_load_minus_prod_kwh_series = load_vector - PV_roof_prod_kwh_series
         PV_load_minus_total_prod_kwh_series = load_vector - (PV_roof_prod_kwh_series + PV_ground_prod_kwh_series)
@@ -620,7 +628,7 @@ function tech_potential_reopt(;
         bau_inputs1 = REopt.BAUInputs(inputs1)
 
         BAU_emissions_aer_total = bau_inputs1.s.site.bau_emissions_lb_CO2_per_year #this is an aggregate total electric + ng
-        println("The total BAU emissions for # $i is: ", BAU_emissions_aer_total)
+        #println("The total BAU emissions for # $i is: ", BAU_emissions_aer_total)
         BAU_grid_emissions_aer_total = bau_inputs1.s.site.bau_grid_emissions_lb_CO2_per_year #this is grid specific total emissions 
         BAU_grid_emissions_aer_series = bau_inputs1.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh #this is an 8760 series for grid emissions
 

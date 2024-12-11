@@ -2,7 +2,7 @@
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "27c1b3edba20f51aab558f687dac33c3ec0aa683"
+project_hash = "8c9eb6e7229c64666718445f2c02ca13ce874d8f"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -300,6 +300,10 @@ deps = ["LRUCache", "OffsetArrays"]
 git-tree-sha1 = "ef25c513cad08d7ebbed158c91768ae32f308336"
 uuid = "3c3547ce-8d99-4f5e-a174-61eb10b00ae3"
 version = "0.3.23"
+
+[[deps.Distributed]]
+deps = ["Random", "Serialization", "Sockets"]
+uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["AliasTables", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns"]
@@ -1327,6 +1331,12 @@ version = "1.0.3"
 git-tree-sha1 = "874e8867b33a00e784c8a7e4b60afe9e037b74e1"
 uuid = "777ac1f9-54b0-4bf8-805c-2214025038e7"
 version = "1.1.0"
+
+[[deps.SlurmClusterManager]]
+deps = ["Distributed"]
+git-tree-sha1 = "9ea4bf8d0525f12ed59a8b5b1d7db6703281508e"
+uuid = "c82cd089-7bf7-41d7-976b-6b5d413cbe0a"
+version = "0.1.2"
 
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
