@@ -1,0 +1,61 @@
+ERROR: MethodError: no method matching length(::Missing)
+Closest candidates are:
+  length(!Matched::Union{Base.KeySet, Base.ValueIterator}) at abstractdict.jl:58
+  length(!Matched::Union{DataStructures.OrderedRobinDict, DataStructures.RobinDict}) at ~/.julia/packages/DataStructures/95DJa/src/ordered_robin_dict.jl:86
+  length(!Matched::Union{DataStructures.SortedDict, DataStructures.SortedMultiDict, DataStructures.SortedSet}) at ~/.julia/packages/DataStructures/95DJa/src/container_loops.jl:322
+  ...
+Stacktrace:
+ [1] _append!(a::Vector{Any}, #unused#::Base.HasLength, iter::Missing)
+   @ Base ./array.jl:1121
+ [2] append!(a::Vector{Any}, iter::Missing)
+   @ Base ./array.jl:1113
+ [3] get_load_data(; match_id::String15, folder_path_e::String, folder_path_ng::String, traits_file::String, set_file::String)
+   @ Main /kfs3/scratch/dbernal/Wind_PV_Tech_Potential/tests_v3.jl:350
+ [4] tech_potential_reopt(; num_sites::Int64, index_start::Int64, batch_number::Int64)
+   @ Main /kfs3/scratch/dbernal/Wind_PV_Tech_Potential/tests_v3.jl:446
+ [5] top-level scope
+   @ none:3
+The annual MMBtu consumption is  = 7814.285
+Completed run number 1935
+Got stuck trying to find a match file0
+Got the simu_id = 002765
+The annual MMBtu consumption is  = 43354.73
+Completed run number 1936
+Got stuck trying to find a match file0
+Got the simu_id = 005491
+The annual MMBtu consumption is  = 2865.7174999999997
+Completed run number 1937
+Got stuck trying to find a match file0
+Got the simu_id = 002905
+The annual MMBtu consumption is  = 8116.222
+Completed run number 1938
+Got stuck trying to find a match file0
+Got the simu_id = 004643
+The annual MMBtu consumption is  = 17730.58
+Completed run number 1939
+Got stuck trying to find a match file0
+Got the simu_id = 004393
+The annual MMBtu consumption is  = 2806.3275
+Completed run number 1940
+Got stuck trying to find a match file0
+Got the simu_id = 005051
+The annual MMBtu consumption is  = 20195.8
+Completed run number 1941
+Got stuck trying to find a match file0
+Got the simu_id = 002848
+The annual MMBtu consumption is  = 6546.620000000001
+Completed run number 1942
+Got stuck trying to find a match file0
+Got the simu_id = 003507
+The annual MMBtu consumption is  = 2875.3495000000003
+Completed run number 1943
+Got stuck trying to find a match file0
+Got the simu_id = 003826
+The annual MMBtu consumption is  = 2875.3495000000003
+Completed run number 1944
+Got stuck trying to find a match file0
+Got the simu_id = 001991
+The annual MMBtu consumption is  = 9595.354
+Completed run number 1945
+Got stuck trying to find a match file0
+Got the simu_id = 003760
