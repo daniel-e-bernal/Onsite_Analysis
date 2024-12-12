@@ -380,21 +380,21 @@ end
 
     # File imports
     pv_roof_prod_factors = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PVWatts_/pvwatts_roof_csvs/"
-    pv_ground_prod_factors = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PVWatts_/pvwatts_ground_csvs/"
+    pv_ground_prod_factors = "C:/Users/dbernal/Documents/GitHub/Public_REopt_analysis/pvwatts_ground_csvs/"
 
     #Set-up inputs file for PV runs 
     data_file = "solar_runs_v2.json"
     input_data = JSON.parsefile("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/Input Resources/$data_file")
 
     #parcel file path in IEDO Teams 
-    parcel_file = "C:/Users/dbernal/OneDrive-NREL/General - IEDO Onsite Energy/Data/PNNL Parcel Land Coverage Analysis/updated_11_27_2024/LC_facility_parcels_NREL_11_27.csv"
+    parcel_file = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PNNL Parcel Land Coverage Analysis/updated_11_27_2024/LC_facility_parcels_NREL_11_27.csv"
     
     #get data from CSV file for parcel data 
     data = read_csv_parcel_file(parcel_file)
     
     # Add common site information
     function run_site(i::Int)
-        
+            
         #store results
         analysis_runs = DataFrame()
         emissions = DataFrame() 
@@ -709,15 +709,15 @@ end
 
         println("Completed runs number $i")
         
-        write(joinpath("C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/analysis_results_storage/PV/analysis_runs/", "$(file_name)_analysis_runs.json"), JSON.json(analysis_runs))
-        write(joinpath("C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/analysis_results_storage/PV/emissions/", "$(file_name)_emissions.json"), JSON.json(emissions))
-        write(joinpath("C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/analysis_results_storage/PV/inputs_REopt/", "$(file_name)_inputs_REopt.json"), JSON.json(inputs2))
-        write(joinpath("C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/analysis_results_storage/PV/inputs_site/", "$(file_name)_inputs_data_site.json"), JSON.json(input_data_site))
+        write(joinpath("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/analysis_runs/", "$(file_name)_analysis_runs.json"), JSON.json(analysis_runs))
+        write(joinpath("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/emissions/", "$(file_name)_emissions.json"), JSON.json(emissions))
+        write(joinpath("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/inputs_REopt/", "$(file_name)_inputs_REopt.json"), JSON.json(inputs2))
+        write(joinpath("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/inputs_site/", "$(file_name)_inputs_data_site.json"), JSON.json(input_data_site))
         sleep(1.0)
 
         # Set up extractable json file with all inputs to put onto DataFrame
-        inputs_all = JSON.parsefile(joinpath("C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/analysis_results_storage/PV/inputs_REopt/", "$(file_name)_inputs_REopt.json"))
-        input_data_dic = JSON.parsefile(joinpath("C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/analysis_results_storage/PV/inputs_site/", "$(file_name)_inputs_data_site.json"))
+        inputs_all = JSON.parsefile(joinpath("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/inputs_REopt/", "$(file_name)_inputs_REopt.json"))
+        input_data_dic = JSON.parsefile(joinpath("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/inputs_site/", "$(file_name)_inputs_data_site.json"))
 
         df = DataFrame(
             MatchID = analysis_runs[1, :MatchID],
@@ -808,19 +808,23 @@ end
 
 ## Read the files
 scenarios = read_csv_parcel_file(parcel_file)
+match_id = scenarios[!, :MatchID]
+evaluated = readdir("C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/Batch Results/PV_results/")
 
 @info size(scenarios)
-
-@time pmap(1:1000) do i
+        
+@time pmap(5000:6000) do i
+    fname = string(match_id[i], "_PV_run_result.csv")
     try
-        # Pass a vector of values for each site.
-        #println(i, "and type of object is: ", typeof(i))
-        run_site(i)
-        sleep(0)
+        if !(fname in evaluated)
+            # Pass a vector of values for each site.
+            #println(i, "and type of object is: ", typeof(i))
+            @time run_site(i)
+        end
     catch e
     	@info e
         @warn "Error for " scenarios[!, 1][i]
-        sleep(2)
+        sleep(3)
     end
 end
 
