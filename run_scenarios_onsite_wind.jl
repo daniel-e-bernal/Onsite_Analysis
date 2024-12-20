@@ -432,7 +432,7 @@ end
         max_kw_based_on_space = data[!, :turbine_0_max_cap_kW][i] #this value should be size class * num of turbines of that size class that can fit in the plot 
         input_data_site["Wind"]["size_class"] = String(wind_class)
         input_data_site["Wind"]["max_kw"] = max_kw_based_on_space
-        input_data_site["Wind"]["min_kw"] = max_kw_based_on_space * 0.99
+        #input_data_site["Wind"]["min_kw"] = max_kw_based_on_space * 0.99
         println("The max size for the wind system will be ", input_data_site["Wind"]["max_kw"])
         """ Below is attaining the REopt inputs related to aer_gen_co2e_c emissions to calculate BAU emissions."""
         input_data_site["ElectricUtility"]["cambium_metric_col"] = "aer_gen_co2e_c"
