@@ -202,10 +202,10 @@ data = readdlm(
 # columns 24 and 25 are for lat/lng and also the MatchID to name the csv file
 @info data[1, 2], data[1, 3], data[1, 46], data[1, 50]
 
-evaluated = readdir("pvwatts_roof_csvs")
+evaluated = readdir("C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PVWatts_/pvwatts_roof_csvs/")
 
 # size(data)
-@time Threads.@threads for r in 2901:3901
+@time Threads.@threads for r in 1:163000
 
     lat = data[r, 2]
     lon = data[r, 3]

@@ -310,15 +310,14 @@ end
         
         #get the selected cols from the df
         df = initial_df[:, cols]
-        df = df[df.state .!= "HI", :]
-        df = df[df.state .!= "AK", :]
+        df = df[df.state .!= "PR", :]
+        df = df[df.state .!= "VI", :]
         df = df[.!ismissing.(df.latitude), :]
         df = df[.!isnan.(df.latitude), :]
         df = df[.!ismissing.(df.longitude), :]
         df = df[.!isnan.(df.longitude), :]
         df = df[.!ismissing.(df.MatchID), :]
-        df = df[.!ismissing.(df.rooftop_area_m2), :]
-        df = df[.!ismissing.(df.solarPV_ground_area), :]
+        df = df[.!ismissing.(df.rooftop_area_m2) .& .!ismissing.(df.solarPV_ground_area), :]
         return df 
     end
     
@@ -373,13 +372,13 @@ end
 
     # Folder paths
     #get load data from IEDO Teams
-    electric_load_folder_path = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/Facility Load Profiles/"
+    electric_load_folder_path = "C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/Load Profiles/"
     load_traits_text = "Load Facility Traits Set"
     load_data_text = "Load Facility Set"
-    ng_load_folder_path = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/Industrial Facility Annual Energy Consumption Estimates/"
+    ng_load_folder_path = "C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/NG Consumption/"
 
     # File imports
-    pv_roof_prod_factors = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PVWatts_/pvwatts_roof_csvs/"
+    pv_roof_prod_factors = "C:/Users/dbernal/Documents/GitHub/Public_REopt_analysis/pvwatts_roof_csvs/"
     pv_ground_prod_factors = "C:/Users/dbernal/Documents/GitHub/Public_REopt_analysis/pvwatts_ground_csvs/"
 
     #Set-up inputs file for PV runs 
@@ -387,7 +386,7 @@ end
     input_data = JSON.parsefile("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/Input Resources/$data_file")
 
     #parcel file path in IEDO Teams 
-    parcel_file = "C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PNNL Parcel Land Coverage Analysis/updated_11_27_2024/LC_facility_parcels_NREL_11_27.csv"
+    parcel_file = "C:/Users/dbernal/Documents/GitHub/Public_REopt_analysis/Input Resources/LC_facility_parcels_NREL_11_27.csv"
     
     #get data from CSV file for parcel data 
     data = read_csv_parcel_file(parcel_file)
@@ -782,7 +781,7 @@ end
         )
         #println(df)
         # Define path to csv file
-        file_storage_location = joinpath("C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/Batch Results/PV_results/", "$(file_name)_run_result.csv")
+        file_storage_location = joinpath("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/results/", "$(file_name)_run_result.csv")
 
         # Write DataFrame to a new or existing CSV file
         if isfile(file_storage_location)
@@ -809,11 +808,11 @@ end
 ## Read the files
 scenarios = read_csv_parcel_file(parcel_file)
 match_id = scenarios[!, :MatchID]
-evaluated = readdir("C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/Batch Results/PV_results/")
+evaluated = readdir("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/PV/results/")
 
 @info size(scenarios)
         
-@time pmap(5000:6000) do i
+@time pmap(1:100) do i
     fname = string(match_id[i], "_PV_run_result.csv")
     try
         if !(fname in evaluated)
