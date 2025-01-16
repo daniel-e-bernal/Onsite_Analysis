@@ -386,7 +386,8 @@ end
     input_data = JSON.parsefile("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/Input Resources/$data_file")
 
     #parcel file path in IEDO Teams 
-    parcel_file = "C:/Users/dbernal/Documents/GitHub/Public_REopt_analysis/Input Resources/LC_facility_parcels_NREL_11_27.csv"
+    #parcel_file = "C:/Users/dbernal/Documents/GitHub/Public_REopt_analysis/Input Resources/LC_facility_parcels_NREL_11_27.csv"
+    parcel_file = "C:/Users/dbernal/OneDrive - NREL/Non-shared files/IEDO/Onsite Energy Program/Analysis Team/results/rerun_solar3_negatives_ground.csv"
     
     #get data from CSV file for parcel data 
     data = read_csv_parcel_file(parcel_file)
@@ -415,6 +416,7 @@ end
             land_acres = 0
         else 
             land_acres = round(land_acres / 4046.86, digits=4) #conversion from m2 to acres
+            println("The land acres constraint is (acres): ", land_acres)
         end
         #roofspace conversion
         roof_space = data[!, :rooftop_area_m2][i]
@@ -430,6 +432,7 @@ end
         
         #get MatchID in data DataFrame to start getting other data from loads 
         match_id = data[!, :MatchID][i]
+        println("The site's Match ID is: ", match_id)
 
         #create the file name for this specific site + PV (the other version is Wind)
         file_name = string(match_id, "_PV")
@@ -470,9 +473,9 @@ end
                 gcr_pv = GCR_eq(latitude=latitude, array_type=array_type_i)
                 input_data_site["PV"][name]["gcr"] = gcr_pv
                 input_data_site["PV"][name]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
-                input_data_site["PV"][name]["production_factor_series"] = select_prod_factor(match_id=match_id)[1]
-                prod_factor = select_prod_factor(match_id=match_id)[1]
-                println("The type object for the prod_factor is ", typeof(prod_factor))
+                #input_data_site["PV"][name]["production_factor_series"] = select_prod_factor(match_id=match_id)[1]
+                #prod_factor = select_prod_factor(match_id=match_id)[1]
+                #println("The type object for the prod_factor is ", typeof(prod_factor))
             elseif input_data_site["PV"][name]["name"] == "roof_fixed"
                 input_data_site["PV"][name]["array_type"] = 1 #roof-fixed rack
                 array_type_i = input_data_site["PV"][name]["array_type"]
@@ -484,11 +487,11 @@ end
                 gcr_pv = GCR_eq(latitude=latitude, array_type=array_type_i)
                 input_data_site["PV"][name]["gcr"] = gcr_pv
                 input_data_site["PV"][name]["tilt"] = tilt_pv(latitude=latitude, GCR=gcr_pv, array_type=array_type_i)
-                input_data_site["PV"][name]["production_factor_series"] = select_prod_factor(match_id=match_id)[2]
+                #input_data_site["PV"][name]["production_factor_series"] = select_prod_factor(match_id=match_id)[2]
             end
         end
         #println("The power density for ground mounted PV is: ", input_data_site["PV"][1]["acres_per_kw"])
-        sleep(10)
+        #sleep(10)
         """ Below is attaining the REopt inputs related to aer_gen_co2e_c emissions to calculate BAU emissions."""
         input_data_site["ElectricUtility"]["cambium_metric_col"] = "aer_gen_co2e_c"
         s1 = Scenario(input_data_site)
@@ -500,21 +503,23 @@ end
         PV_roof_capacity_factor = sum(PV_prod_data["roof_fixed", :]) / 8760 #actual capacity factor
         PV_ground_max_size_based_on_load = input_data_site["ElectricLoad"]["annual_kwh"] / (PV_ground_capacity_factor * 8760)
         PV_roof_max_size_based_on_load = input_data_site["ElectricLoad"]["annual_kwh"] / (PV_roof_capacity_factor * 8760)
-        #println("Max size for PV on ground (kW) based on annual load for # $i is: ", PV_ground_max_size_based_on_load)
-        #println("Max size for PV on roof (kW) based on annual load for # $i is: ", PV_roof_max_size_based_on_load)
+        println("Max size for PV on ground (kW) based on annual load for # is: ", PV_ground_max_size_based_on_load)
+        println("Max size for PV on roof (kW) based on annual load for # is: ", PV_roof_max_size_based_on_load)
         #now getting max size based on space
         PV_ground_max_size_based_on_space = land_acres * (1/PV_ground_power_density) #inputs1.max_sizes["ground_mount"] #max size based on space 
         PV_roof_max_size_based_n_space = roof_space * (PV_roof_power_density) #inputs1.max_sizes["roof_fixed"] #max size based on space 
         #println("Max size for PV on ground (kW) based on ground space for # $i is: ", PV_ground_max_size_based_on_space)
         #println("Max size for PV on roof (kW) based on roof space for # $i is: ", PV_roof_max_size_based_n_space)
         inputs1.max_sizes["ground_mount"] = PV_ground_max_size_based_on_space
+        println("The PV ground max size based on space is (acres): ", PV_ground_max_size_based_on_space)
         inputs1.max_sizes["roof_fixed"] = PV_roof_max_size_based_n_space
+        println("The PV roof max size based on space is: (acres)", PV_roof_max_size_based_n_space)
         #create global variables for PV sizes on roof and ground 
         roof_PV_size = 0
         ground_PV_size = 0
         #now re-set the sizes for PV on the roof and ground, with roof as the priority
         if PV_roof_max_size_based_on_load <= PV_roof_max_size_based_n_space
-            #println("PV roof max size based on load for # $i is less than or equal to PV max size based on space.")
+            println("PV roof max size based on load for # $i is less than or equal to PV max size based on space.")
             input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_on_load * 0.99
             roof_PV_size = PV_roof_max_size_based_on_load
             input_data_site["PV"][2]["max_kw"] = roof_PV_size
@@ -522,17 +527,23 @@ end
             ground_PV_size_remainder = 0 
             input_data_site["PV"][1]["max_kw"] = ground_PV_size_remainder
         elseif PV_roof_max_size_based_on_load > PV_roof_max_size_based_n_space
-            #println("PV roof max size based on load for # $i is greater than PV max size based on space.")
+            println("PV roof max size based on load for # is greater than PV max size based on space.")
             #fix the minimum kW for the roof 
             input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.99
             #identify the max kW for ground remainder after knowing the total load 
             roof_PV_size = PV_roof_max_size_based_n_space
             input_data_site["PV"][2]["max_kw"] = roof_PV_size
-            ground_remainder = (PV_ground_max_size_based_on_load - roof_PV_size) >= PV_ground_max_size_based_on_space ? PV_ground_max_size_based_on_space : (PV_ground_max_size_based_on_load - roof_PV_size) 
-            #println("The max size for ground: ", ground_remainder)
+            roof_remainder = PV_roof_max_size_based_on_load - PV_roof_max_size_based_n_space
+            ground_remainder = 0
+            if PV_ground_max_size_based_on_space < PV_ground_max_size_based_on_load
+                ground_remainder = roof_remainder > PV_ground_max_size_based_on_space ? PV_ground_max_size_based_on_space : roof_remainder
+            else
+                ground_remainder = roof_remainder > PV_ground_max_size_based_on_load ? PV_ground_max_size_based_on_load : roof_remainder
+            end
+            println("The max size for ground: ", ground_remainder)
             input_data_site["PV"][1]["max_kw"] = ground_remainder
             ground_PV_size = input_data_site["PV"][1]["max_kw"]
-            #println("Assinged max ground PV size (kW): ", ground_PV_size)
+            println("Assinged max ground PV size (kW): ", ground_PV_size)
             input_data_site["PV"][1]["min_kw"] = ground_PV_size * 0.99
 
             input_data_site["PV"][1]["array_type"] = ground_PV_size <= 1356 ? 0 : 2 #if over 1 MW -> 2, one-axis tracking
@@ -617,7 +628,9 @@ end
             grid_supplied_kwh_series = [grid_supplied_kwh],
             PV_serving_load_kwh_series = [PV_serving_load_total_series],
             PV_serving_load_kwh_total = sum(PV_serving_load_total_series),
-            ng_annual_consumption = ng_annual_mmbtu
+            ng_annual_consumption = ng_annual_mmbtu,
+            PV_max_possible_size_kw_ground = PV_ground_max_size_based_on_space,
+            PV_max_possible_size_kw_roof = PV_roof_max_size_based_n_space
         )
 
         bau_inputs1 = REopt.BAUInputs(inputs1)
@@ -738,7 +751,7 @@ end
             input_PV_ground_power_density = [input_data_dic["PV"][1]["acres_per_kw"]],
             PV_size_kw_ground = [round(input_data_dic["PV"][1]["max_kw"], digits=4)],
             PV_annual_kwh_energy_production_avg_ground = (round.(analysis_runs[1, :PV_ground_production_total], digits=0)),
-            PV_max_possible_size_kw_ground = [round(inputs_all["max_sizes"]["ground_mount"], digits=4)],
+            PV_max_possible_size_kw_ground = (round.(analysis_runs[1, :PV_max_possible_size_kw_ground], digits=4)),
             #roof PV inputs
             input_PV_roof_location = [input_data_dic["PV"][2]["location"]],
             input_PV_array_type_roof = [input_data_dic["PV"][2]["array_type"]],
@@ -747,7 +760,7 @@ end
             input_PV_roof_power_density = [input_data_dic["PV"][2]["kw_per_square_foot"]],
             PV_size_kw_roof = [round(input_data_dic["PV"][2]["max_kw"], digits=4)],
             PV_annual_kwh_energy_production_avg_roof = (round.(analysis_runs[1, :PV_roof_production_total], digits=0)),
-            PV_max_possible_size_kw_roof = [round(inputs_all["max_sizes"]["roof_fixed"], digits=4)],
+            PV_max_possible_size_kw_roof = (round.(analysis_runs[1, :PV_max_possible_size_kw_roof], digits=4)),
             #total metrics 
             PV_energy_exported_total = (round.(analysis_runs[1, :PV_export_total_kwh], digits=0)),
             PV_annual_kwh_energy_production_avg_total = (round.(analysis_runs[1, :PV_production_total], digits=0)),
@@ -812,10 +825,10 @@ evaluated = readdir("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/P
 
 @info size(scenarios)
         
-@time pmap(1:100) do i
+@time pmap(1:50) do i
     fname = string(match_id[i], "_PV_run_result.csv")
     try
-        if !(fname in evaluated)
+        if !(fname in evaluated) #|| (fname in evaluated)
             # Pass a vector of values for each site.
             #println(i, "and type of object is: ", typeof(i))
             @time run_site(i)

@@ -297,9 +297,9 @@ end
                 append!(temperature_celsius_height_1, Float64(dict_pckl["data"][i][1]))
                 append!(atmos_pressure_height_1, Float64(dict_pckl["data"][i][2]))  # Fixed to use 4th element
     
-                append!(wind_m_per_sec_height_2, Float64(dict_pckl["data"][i][3]))
+                append!(wind_m_per_sec_height_2, Float64(dict_pckl["data"][i][7]))
                 append!(wind_direction_degrees_height_2, Float64(dict_pckl["data"][i][8]))
-                append!(temperature_celsius_height_2, Float64(dict_pckl["data"][i][1]))
+                append!(temperature_celsius_height_2, Float64(dict_pckl["data"][i][5]))
                 append!(atmos_pressure_height_2, Float64(dict_pckl["data"][i][6]))
             end
     
