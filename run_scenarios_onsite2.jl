@@ -2,7 +2,7 @@
 # https://github.com/Arpeggeo/julia-distributed-computing
 
 using Distributed, SlurmClusterManager
-
+sleep(8000)
 # Env instantiation
 @everywhere begin
     using Pkg
@@ -383,7 +383,7 @@ end
 
     #parcel file path in IEDO Teams 
     #parcel_file = "C:/GitRepos/Onsite_Energy_temporary/LC_facility_parcels_NREL_11_27.csv"
-    parcel_file = "C:/GitRepos/Onsite_Energy_temporary/rerun_solar2.csv"
+    parcel_file = "C:/GitRepos/Onsite_Energy_temporary/rerun_solar.csv"
     
     #get data from CSV file for parcel data 
     data = read_csv_parcel_file(parcel_file)
@@ -485,6 +485,7 @@ end
             end
         end
         #println("The power density for ground mounted PV is: ", input_data_site["PV"][1]["acres_per_kw"])
+        #sleep(10)
         """ Below is attaining the REopt inputs related to aer_gen_co2e_c emissions to calculate BAU emissions."""
         input_data_site["ElectricUtility"]["cambium_metric_col"] = "aer_gen_co2e_c"
         s1 = Scenario(input_data_site)
@@ -815,7 +816,7 @@ evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/results/PV/results/")
 @time pmap(1:end_run) do i
     fname = string(match_id[i], "_PV_run_result.csv")
     try
-        if !(fname in evaluated) || (fname in evaluated)
+        if !(fname in evaluated)
             # Pass a vector of values for each site.
             #println(i, "and type of object is: ", typeof(i))
             @time run_site(i)

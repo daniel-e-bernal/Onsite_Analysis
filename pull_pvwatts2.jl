@@ -181,9 +181,9 @@ function tilt_pv(;
 end
 
 @info Pkg.status()
-
-"""data = readdlm(
-    joinpath("./Input Resources/", "LC_facility_parcels_NREL_11_27.csv"),
+"""
+data = readdlm(
+    joinpath("C:/Users/dbernal/Documents/GitHub/Public_REopt_Analysis/Input Resources/", "LC_facility_parcels_NREL_11_27.csv"),
     ','
 )"""
 #columns to select from csv file for parcel data
@@ -198,55 +198,72 @@ function read_csv_parcel_file(file_path::String)
     df = df[.!ismissing.(df.rooftop_area_m2) .& .!ismissing.(df.solarPV_ground_area), :]
     return df 
 end
+
 data = read_csv_parcel_file("C:/GitRepos/Onsite_Energy_temporary/LC_facility_parcels_NREL_11_27.csv")
 #rerun_data = CSV.read("C:/GitRepos/Onsite_Energy_temporary/rerun_solar2.csv", DataFrame)
-#max_run = length(rerun_data[!, :MatchID])
 max_run = length(data[!, :MatchID])
+#max_run = length(rerun_data[!, :MatchID])
 
-# columns 24 and 25 are for lat/lng and also the MatchID to name the csv file
-#@info data[1, 2], data[1, 3], data[1, 47], data[1, 50]
-#data = filter(x -> isa(x, Float64), data[:, 2]) #filter out for non-Float64s
-#data = filter(x -> isa(x, Float64), data[:, 3]) #filter out for non-Float64s
-#data = filter(x -> isa(x, SubString), data[:, 47])
-evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_csvs/pvwatts_roof_csvs/")
+evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_fixed_csvs/")
+evaluated2 = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_axis_csvs/")
+path_fixed = "C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_fixed_csvs/"
+path_axis = "C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_axis_csvs/"
 
 # size(data)
 @time Threads.@threads for r in 1:max_run
     
-    lat = rerun_data[!, :parcel_latitude][r]
+    lat = data[!, :parcel_latitude][r]
     #println(lat)
-    lon = rerun_data[!, :parcel_longitude][r]
+    lon = data[!, :parcel_longitude][r]
     #println(lon)
-    match_id = rerun_data[!, :MatchID][r]
-    println(match_id)
-    pv_roof_space = rerun_data[!, :rooftop_area_m2][r]
-    #println(pv_roof_space)
-    pv_roof_space = round(pv_roof_space * 10.7639, digits=4) #conversion from m2 to ft2
+    match_id = data[!, :MatchID][r]
+    #println(match_id)
+    pv_ground_space = data[!, :solarPV_ground_area][r]
+    #println(pv_ground_space)
+    pv_ground_space = round(pv_ground_space / 4046.86, digits=4) #conversion from m2 to acres
 
-    array_type_i = 1
+    array_type_i = pv_ground_space < 4.2 ? 0 : 2 
     gcr_i=GCR_eq(latitude=lat, array_type=array_type_i)
     tilt_i=tilt_pv(latitude=lat, GCR=gcr_i, array_type=array_type_i)
+    #in case we need to re-run the old prod factor
+    gcr_j=GCR_eq(latitude=lat, array_type=0)
+    tilt_j=tilt_pv(latitude=lat, GCR=gcr_j, array_type=0)
     
     fname = string(match_id, ".csv") #name the csv file to that MatchID
     println(r)
     counter = r
-    if !(fname in evaluated) || (fname in evaluated)
+    if array_type_i == 2 && !(fname in evaluated2)
         try
             watts, ambient_temp_celcius = REopt.call_pvwatts_api(
                 lat, lon;
                 tilt=tilt_i, #degrees
                 azimuth=180, #south facing
                 module_type=1, #premium module 
-                array_type=array_type_i, # rooftop pv, fixed
+                array_type=array_type_i, # if one-axis tracking
                 losses=round(0.14*100, digits=3), #pv system losses
-                dc_ac_ratio=1.2, # no conversion to AC
+                dc_ac_ratio= array_type_i == 0 ? 1.2 : 1.3, # if array type if fixed, then 1.2, if one-axis tracking then 1.3
                 gcr=gcr_i, #gcr
                 inv_eff=0.95*100, #95% charge controller losses
                 timeframe="hourly",
                 radius=0,
                 time_steps_per_hour=1
             )
-            writedlm(joinpath("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_csvs/pvwatts_roof_csvs/", fname), watts, ',')
+            writedlm(joinpath(path_axis, fname), watts, ',')
+            watts, ambient_temp_celcius = REopt.call_pvwatts_api(
+                    lat, lon;
+                    tilt=tilt_j, #degrees
+                    azimuth=180, #south facing
+                    module_type=1, #premium module 
+                    array_type=0, # rooftop pv, fixed
+                    losses=round(0.14*100, digits=3), #pv system losses
+                    dc_ac_ratio= array_type_i == 0 ? 1.2 : 1.3, # if array type if fixed, then 1.2, if one-axis tracking then 1.3
+                    gcr=gcr_j, #gcr
+                    inv_eff=0.95*100, #95% charge controller losses
+                    timeframe="hourly",
+                    radius=0,
+                    time_steps_per_hour=1
+                )
+                writedlm(joinpath(path_fixed, fname), watts, ',')
         catch e
             @info e
         end
