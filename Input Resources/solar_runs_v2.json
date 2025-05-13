@@ -13,12 +13,14 @@
         {
             "name": "ground_mount",
             "location": "ground",
-            "installed_cost_per_kw": 10
+            "installed_cost_per_kw": 10,
+            "module_type": 1
           },
           {
             "name": "roof_fixed",
             "location": "roof",
-            "installed_cost_per_kw": 10
+            "installed_cost_per_kw": 10,
+            "module_type": 1
           }
     ],    
     "ElectricTariff": {

@@ -21,17 +21,19 @@ function convert_string_to_float(entry::Any)
 end
 
 #get the max size
-function filtered_max_size(space_max_size::String)
-    if space_max_size == "Bergey Excel 15"
-        return 1, 15.6
-    elseif space_max_size == "Northern Power Systems 100"
-        return 2, 100
-    elseif space_max_size == "Vestas V-47"
-        return 3, 660
-    elseif space_max_size == "GE 1.5 MW"
-        return 4, 1500
-    else 
-        return 5, 600
+function hub_height(size_class::AbstractString)
+    if size_class == "Bergey Excel 15"
+        return "24m"
+    elseif size_class == "Northern Power Systems 100"
+        return "37m"
+    elseif size_class == "Vestas V-47"
+        return "60m"
+    elseif size_class == "GE 1.5 MW"
+        return "80m"
+    elseif size_class == "Bespoke 6 MW 170"
+        return "115m"
+    else
+        println("Not correct size class insertion")
     end
 end
 
@@ -214,18 +216,297 @@ function select_wind_turbines(row::DataFrame, max_load::Real)
     return "No valid configuration found for the given max load."
 end
 
+function select_wind_turbines2(row::DataFrame, max_load::Real, cap_factor::Real, inputs::Dict)
+    # Initialize variables to store results
+    selected_class = nothing
+    selected_turbines = 0
+    total_capacity = 0.0
+    capacity_factor = 0.35
+    if cap_factor !== nothing
+        capacity_factor = cap_factor
+    end
+        
+    # Loop through turbine classes in the row
+    for i in 0:5  # Iterates over turbine_0 to turbine_5
+        # Get the turbine class, total capacity, and number of turbines
+        turbine_class = row[1, Symbol("turbine_$i")]
+        #println("The turbine class is ", turbine_class)
+        
+        total_capacity_class = row[1, Symbol("turbine_$(i)_max_cap_kW")]
+        num_turbines = row[1, Symbol("turbine_$(i)_num_turbines")]
+
+        if !ismissing(total_capacity_class) && !ismissing(num_turbines) && i == 0
+            total_capacity_class = total_capacity_class[1]
+            num_turbines = num_turbines[1]
+            
+            #println("Total capacity class: ", total_capacity_class)
+            #println("Total turbine count: ", num_turbines)
+            
+            # Calculate the capacity per turbine
+            if num_turbines > 0
+                capacity_per_turbine = total_capacity_class / num_turbines
+                #println("Capacity per turbine is: ", capacity_per_turbine)
+                
+                # Calculate max capacity based on load
+                max_size_based_on_load = max_load / (capacity_factor * 8760)
+                #println("The max size (kW) based on load is ", max_size_based_on_load)
+                
+                counter = 0 # for reducing turbine count
+
+                # Reduce number of turbines one by one
+                while counter < num_turbines
+                    turbines_left = max(0, num_turbines - counter)
+                    total_capacity = turbines_left * capacity_per_turbine
+                    #println("Turbines left: ", turbines_left, " | Total capacity: ", total_capacity)
+                    
+                    if total_capacity <= max_size_based_on_load && total_capacity > 0
+                        # Return when condition is satisfied
+                        selected_class = turbine_class
+                        selected_turbines = turbines_left
+                        #println("Selected Turbine Class: ", selected_class)
+                        #println("Number of Turbines: ", selected_turbines)
+                        #println("Total Capacity (kW): ", total_capacity)
+                        return Dict(
+                            "Selected Turbine Class" => selected_class,
+                            "Number of Turbines" => selected_turbines,
+                            "Total Capacity (kW)" => total_capacity
+                        )
+                    else
+                        counter += 1
+                    end
+                end
+            else
+                println("Skipping turbine class ", turbine_class, " due to zero turbines.")
+            end
+        elseif !ismissing(total_capacity_class) && !ismissing(num_turbines) && i > 0
+            total_capacity_class = total_capacity_class[1]
+            num_turbines = num_turbines[1]
+            
+            #println("Total capacity class: ", total_capacity_class)
+            #println("Total turbine count: ", num_turbines)
+            
+            # Calculate the capacity per turbine
+            if num_turbines > 0
+                capacity_per_turbine = total_capacity_class / num_turbines
+                #println("Capacity per turbine is: ", capacity_per_turbine)
+
+                input_data_s = copy(inputs)
+
+                input_dat_s["Wind"]["size_class"] = turbine_class
+                
+                # Calculate max capacity based on load
+                max_size_based_on_load = max_load / (capacity_factor * 8760)
+                #println("The max size (kW) based on load is ", max_size_based_on_load)
+                
+                counter = 0 # for reducing turbine count
+
+                # Reduce number of turbines one by one
+                while counter < num_turbines
+                    turbines_left = max(0, num_turbines - counter)
+                    total_capacity = turbines_left * capacity_per_turbine
+                    #println("Turbines left: ", turbines_left, " | Total capacity: ", total_capacity)
+                    
+                    if total_capacity <= max_size_based_on_load && total_capacity > 0
+                        # Return when condition is satisfied
+                        selected_class = turbine_class
+                        selected_turbines = turbines_left
+                        #println("Selected Turbine Class: ", selected_class)
+                        #println("Number of Turbines: ", selected_turbines)
+                        #println("Total Capacity (kW): ", total_capacity)
+                        return Dict(
+                            "Selected Turbine Class" => selected_class,
+                            "Number of Turbines" => selected_turbines,
+                            "Total Capacity (kW)" => total_capacity
+                        )
+                    else
+                        counter += 1
+                    end
+                end
+            else
+                println("Skipping turbine class ", turbine_class, " due to zero turbines.")
+            end
+        else
+            println("Data is missing for turbine ", turbine_class)
+        end
+    end
+    
+    # If no valid configuration found
+    return "No valid configuration found for the given max load."
+end
+function select_num_turbines(row::DataFrame, max_load::Real, cap_factor::Real, step::Integer)
+    # Initialize variables to store results
+    selected_class = nothing
+    selected_turbines = 0
+    total_capacity = 0.0
+    capacity_factor = 0.35
+    if cap_factor !== nothing
+        capacity_factor = cap_factor
+    end
+        
+    # Get the turbine class, total capacity, and number of turbines
+    turbine_class = row[1, Symbol("turbine_$step")]
+    #println("The turbine class is ", turbine_class)
+    
+    total_capacity_class = row[1, Symbol("turbine_$(step)_max_cap_kW")]
+    num_turbines = row[1, Symbol("turbine_$(step)_num_turbines")]
+
+    total_capacity_class = total_capacity_class[1]
+    num_turbines = num_turbines[1]
+
+    if num_turbines > 0
+
+        capacity_per_turbine = total_capacity_class / num_turbines
+
+        # Calculate max capacity based on load
+        max_size_based_on_load = max_load / (capacity_factor * 8760)
+        println("The max size (kW) based on load is ", max_size_based_on_load)
+        
+        counter = 0 # for reducing turbine count
+
+        # Reduce number of turbines one by one
+        while counter < num_turbines
+            turbines_left = max(0, num_turbines - counter)
+            total_capacity = turbines_left * capacity_per_turbine
+            println("Turbines left: ", turbines_left, " | Total capacity: ", total_capacity)
+            
+            if total_capacity <= max_size_based_on_load && total_capacity > 0
+                # Return when condition is satisfied
+                selected_class = turbine_class
+                selected_turbines = turbines_left
+                println("Selected Turbine Class: ", selected_class)
+                println("Number of Turbines: ", selected_turbines)
+                println("Total Capacity (kW): ", total_capacity)
+                return Dict(
+                    "Selected Turbine Class" => selected_class,
+                    "Number of Turbines" => selected_turbines,
+                    "Total Capacity (kW)" => total_capacity
+                )
+            else
+                counter += 1
+            end
+        end
+    else
+        println("No valid configuration found for the given max load.")
+        return nothing
+    end
+end
+
 function get_wind_parameters(;
     match_id::Any,
     folder_path_pickl::String #the wind resource parameters pickle file
     )
     # Locate the file that matches the match_id
-    file_path = nothing
+    matching_files = String[]
     files = readdir(folder_path_pickl)
     for f in files
         if occursin(string(match_id), f)
             file_path = joinpath(folder_path_pickl, f)
-            break
+            push!(matching_files, file_path)
+            println("The file path for site $match_id is ", file_path)
         end
+    end
+
+    # Handle case where file was not found
+    if isempty(matching_files)
+        println("Site $match_id does not have wind resource data")
+        return nothing
+    end
+
+    #store results
+    wind_resources = Dict()
+
+    #process each individual file
+    for file in matching_files
+        println("Processing $file")
+        # Load the pickle file
+        dict_pckl = Pickle.npyload(file)
+        resources_count = length(dict_pckl["fields"])
+        time_series_resource_length = length(dict_pckl["data"])  # should be 8760
+
+        # Check if the file has 4 or 8 fields
+        if resources_count == 4
+            # Extract data for 4 fields
+            wind_m_per_sec = []
+            wind_direction_degrees = []
+            temperature_celsius = []
+            atmos_pressure = []
+            println("Single hub height")
+            for i in 1:time_series_resource_length
+                append!(wind_m_per_sec, Float64(dict_pckl["data"][i][3]))
+                append!(wind_direction_degrees, Float64(dict_pckl["data"][i][4]))
+                append!(temperature_celsius, Float64(dict_pckl["data"][i][1]))
+                append!(atmos_pressure, Float64(dict_pckl["data"][i][2]))  # Fixed to use 4th element
+            end
+
+            parts = split(file, "-") # Split by '-'
+            height_text = split(parts[end], ".")[1] # Take the last part, i.e. the turbine height + m
+
+            wind_resources[height_text] = Dict()
+            wind_resources[height_text]["wind_m_per_sec_1"] = wind_m_per_sec
+            wind_resources[height_text]["wind_direction_degrees_1"] = wind_direction_degrees
+            wind_resources[height_text]["temperature_celsius_1"] = temperature_celsius
+            wind_resources[height_text]["atmos_pressure_1"] = atmos_pressure
+            wind_resources[height_text]["heights"] = 1
+
+        elseif resources_count == 8
+            # Extract data for 8 fields (two heights)
+            height_1 = dict_pckl["heights"][1]
+            height_2 = dict_pckl["heights"][5]  # Assuming the 5th index is relevant for height 2
+            println("Getting resources for two hub heights")
+            wind_m_per_sec_height_1 = []
+            wind_direction_degrees_height_1 = []
+            temperature_celsius_height_1 = []
+            atmos_pressure_height_1 = []
+
+            wind_m_per_sec_height_2 = []
+            wind_direction_degrees_height_2 = []
+            temperature_celsius_height_2 = []
+            atmos_pressure_height_2 = []
+
+            for i in 1:time_series_resource_length
+                append!(wind_m_per_sec_height_1, Float64(dict_pckl["data"][i][3]))
+                append!(wind_direction_degrees_height_1, Float64(dict_pckl["data"][i][4]))
+                append!(temperature_celsius_height_1, Float64(dict_pckl["data"][i][1]))
+                append!(atmos_pressure_height_1, Float64(dict_pckl["data"][i][2]))  # Fixed to use 4th element
+
+                append!(wind_m_per_sec_height_2, Float64(dict_pckl["data"][i][7]))
+                append!(wind_direction_degrees_height_2, Float64(dict_pckl["data"][i][8]))
+                append!(temperature_celsius_height_2, Float64(dict_pckl["data"][i][5]))
+                append!(atmos_pressure_height_2, Float64(dict_pckl["data"][i][6]))
+            end
+
+            parts = split(file, "-") # Split by '-'
+            height_text = split(parts[end], ".")[1] # Take the last part, i.e. the turbine height + m
+
+            wind_resources[height_text] = Dict()
+            wind_resources[height_text]["wind_m_per_sec_1"] = wind_m_per_sec_height_1
+            wind_resources[height_text]["wind_direction_degrees_1"] = wind_direction_degrees_height_1
+            wind_resources[height_text]["temperature_celsius_1"] = temperature_celsius_height_1
+            wind_resources[height_text]["atmos_pressure_1"] = atmos_pressure_height_1
+            wind_resources[height_text]["wind_m_per_sec_2"] = wind_m_per_sec_height_2
+            wind_resources[height_text]["wind_direction_degrees_2"] = wind_direction_degrees_height_2
+            wind_resources[height_text]["temperature_celsius_2"] = temperature_celsius_height_2
+            wind_resources[height_text]["atmos_pressure_2"] = atmos_pressure_height_2
+            wind_resources[height_text]["heights"] = 2
+
+        else
+            println("Incomplete information for site $match_id")
+            return nothing
+        end
+    end
+    return wind_resources
+end
+function get_wind_parameters2(;
+    match_id::Any,
+    folder_path_pickl::String, #the wind resource parameters pickle file
+    turbine_step::AbstractString #accepts a string that suggests the hub height ["24m", "37m", "60m", "80m", "115m"]
+    )
+    # Locate the file that matches the match_id
+    file_path = nothing
+    expected_file_name = match_id * "-2012-" * turbine_step * ".pkl"
+    files = readdir(folder_path_pickl)
+    if expected_file_name in files
+        file_path = joinpath(folder_path_pickl, expected_file_name)
     end
 
     # Handle case where file was not found
@@ -233,7 +514,7 @@ function get_wind_parameters(;
         println("Site $match_id does not have wind resource data")
         return nothing
     end
-    
+
     # Load the pickle file
     dict_pckl = Pickle.npyload(file_path)
     resources_count = length(dict_pckl["fields"])
@@ -246,11 +527,11 @@ function get_wind_parameters(;
         wind_direction_degrees = []
         temperature_celsius = []
         atmos_pressure = []
-        
+        println("Single hub height")
         for i in 1:time_series_resource_length
-            append!(wind_m_per_sec, Float64(dict_pckl["data"][i][1]))
+            append!(wind_m_per_sec, Float64(dict_pckl["data"][i][3]))
             append!(wind_direction_degrees, Float64(dict_pckl["data"][i][4]))
-            append!(temperature_celsius, Float64(dict_pckl["data"][i][3]))
+            append!(temperature_celsius, Float64(dict_pckl["data"][i][1]))
             append!(atmos_pressure, Float64(dict_pckl["data"][i][2]))  # Fixed to use 4th element
         end
 
@@ -266,7 +547,7 @@ function get_wind_parameters(;
         # Extract data for 8 fields (two heights)
         height_1 = dict_pckl["heights"][1]
         height_2 = dict_pckl["heights"][5]  # Assuming the 5th index is relevant for height 2
-        
+        println("Getting resources for two hub heights")
         wind_m_per_sec_height_1 = []
         wind_direction_degrees_height_1 = []
         temperature_celsius_height_1 = []
@@ -278,14 +559,14 @@ function get_wind_parameters(;
         atmos_pressure_height_2 = []
 
         for i in 1:time_series_resource_length
-            append!(wind_m_per_sec_height_1, Float64(dict_pckl["data"][i][1]))
+            append!(wind_m_per_sec_height_1, Float64(dict_pckl["data"][i][3]))
             append!(wind_direction_degrees_height_1, Float64(dict_pckl["data"][i][4]))
-            append!(temperature_celsius_height_1, Float64(dict_pckl["data"][i][3]))
+            append!(temperature_celsius_height_1, Float64(dict_pckl["data"][i][1]))
             append!(atmos_pressure_height_1, Float64(dict_pckl["data"][i][2]))  # Fixed to use 4th element
 
-            append!(wind_m_per_sec_height_2, Float64(dict_pckl["data"][i][5]))
+            append!(wind_m_per_sec_height_2, Float64(dict_pckl["data"][i][7]))
             append!(wind_direction_degrees_height_2, Float64(dict_pckl["data"][i][8]))
-            append!(temperature_celsius_height_2, Float64(dict_pckl["data"][i][7]))
+            append!(temperature_celsius_height_2, Float64(dict_pckl["data"][i][5]))
             append!(atmos_pressure_height_2, Float64(dict_pckl["data"][i][6]))
         end
 
@@ -322,7 +603,7 @@ data_file = "wind_runs.json"
 input_data = JSON.parsefile("C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/Input Resources/$data_file")
 
 #parcel file path in IEDO Teams 
-parcel_file = "C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/Input Resources/wind_sitelist_5x5_no_sites_with_exclusions.csv"
+parcel_file = "C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/Input Resources/wind_sitelist_3x7_no_sites_with_exclusions.csv"
 
 #get data from CSV file for parcel data 
 data = read_csv_parcel_file(parcel_file)

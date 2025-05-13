@@ -236,7 +236,7 @@ evaluated = readdir("C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Ener
                 module_type=1, #premium module 
                 array_type=array_type_i, # rooftop pv, fixed
                 losses=round(0.14*100, digits=3), #pv system losses
-                dc_ac_ratio=1.2, # no conversion to AC
+                dc_ac_ratio=1.2, # conversion to AC
                 gcr=gcr_i, #gcr
                 inv_eff=0.95*100, #95% charge controller losses
                 timeframe="hourly",
