@@ -194,12 +194,10 @@ function read_csv_parcel_file(file_path::String)
     
     #get the selected cols from the df
     df = initial_df[:, cols]
-    df = df[.!ismissing.(df.MatchID), :]
-    df = df[.!ismissing.(df.rooftop_area_m2) .& .!ismissing.(df.solarPV_ground_area), :]
     return df 
 end
 
-data = read_csv_parcel_file("C:/GitRepos/Onsite_Energy_temporary/LC_facility_parcels_NREL_11_27.csv")
+data = read_csv_parcel_file("C:/GitRepos/Onsite_Energy_temporary/LC_facility_parcels_NREL_01_28_25.csv")
 #rerun_data = CSV.read("C:/GitRepos/Onsite_Energy_temporary/rerun_solar2.csv", DataFrame)
 max_run = length(data[!, :MatchID])
 #max_run = length(rerun_data[!, :MatchID])
@@ -209,7 +207,7 @@ evaluated2 = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_groun
 path_fixed = "C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_fixed_csvs/"
 path_axis = "C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_axis_csvs/"
 
-# size(data)
+@info size(data)
 @time Threads.@threads for r in 1:max_run
     
     lat = data[!, :parcel_latitude][r]
@@ -230,9 +228,38 @@ path_axis = "C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_axis_cs
     tilt_j=tilt_pv(latitude=lat, GCR=gcr_j, array_type=0)
     
     fname = string(match_id, ".csv") #name the csv file to that MatchID
-    println(r)
+    #println(r)
     counter = r
+    if !(fname in evaluated)
+        println(match_id)
+        sleep(3)
+        try
+            watts, ambient_temp_celcius = REopt.call_pvwatts_api(
+                lat, lon;
+                tilt=tilt_i, #degrees
+                azimuth=180, #south facing
+                module_type=1, #premium module 
+                array_type=array_type_i, # rooftop pv, fixed
+                losses=round(0.14*100, digits=3), #pv system losses
+                dc_ac_ratio=1.2, # no conversion to AC
+                gcr=gcr_i, #gcr
+                inv_eff=0.95*100, #95% charge controller losses
+                timeframe="hourly",
+                radius=0,
+                time_steps_per_hour=1
+            )
+            writedlm(joinpath(path_fixed, fname), watts, ',')
+        catch e
+            @info e
+        end
+        if counter % 100 == 0 
+            sleep(1.0)
+        end
+    end
+end
+    """
     if array_type_i == 2 && !(fname in evaluated2)
+        println(match_id)
         try
             watts, ambient_temp_celcius = REopt.call_pvwatts_api(
                 lat, lon;
@@ -270,5 +297,4 @@ path_axis = "C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_ground_axis_cs
         if counter % 100 == 0 
             sleep(1.0)
         end
-    end
-end
+    end"""

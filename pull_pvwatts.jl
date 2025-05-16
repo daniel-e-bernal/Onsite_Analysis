@@ -191,14 +191,9 @@ cols = [:MatchID, :naicsCode, :place_name, :latitude, :longitude, :parcel_latitu
 function read_csv_parcel_file(file_path::String)
     # Read the CSV into a DataFrame
     initial_df = CSV.read(file_path, DataFrame)
-    
-    #get the selected cols from the df
-    df = initial_df[:, cols]
-    df = df[.!ismissing.(df.MatchID), :]
-    df = df[.!ismissing.(df.rooftop_area_m2) .& .!ismissing.(df.solarPV_ground_area), :]
-    return df 
+    return initial_df 
 end
-data = read_csv_parcel_file("C:/GitRepos/Onsite_Energy_temporary/LC_facility_parcels_NREL_11_27.csv")
+data = read_csv_parcel_file("C:/GitRepos/Onsite_Energy_temporary/LC_facility_parcels_NREL_01_28_25.csv")
 #rerun_data = CSV.read("C:/GitRepos/Onsite_Energy_temporary/rerun_solar2.csv", DataFrame)
 #max_run = length(rerun_data[!, :MatchID])
 max_run = length(data[!, :MatchID])
@@ -208,18 +203,18 @@ max_run = length(data[!, :MatchID])
 #data = filter(x -> isa(x, Float64), data[:, 2]) #filter out for non-Float64s
 #data = filter(x -> isa(x, Float64), data[:, 3]) #filter out for non-Float64s
 #data = filter(x -> isa(x, SubString), data[:, 47])
-evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_csvs/pvwatts_roof_csvs/")
+evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_csvs/")
 
-# size(data)
+@info size(data)
 @time Threads.@threads for r in 1:max_run
     
-    lat = rerun_data[!, :parcel_latitude][r]
+    lat = data[!, :parcel_latitude][r]
     #println(lat)
-    lon = rerun_data[!, :parcel_longitude][r]
+    lon = data[!, :parcel_longitude][r]
     #println(lon)
-    match_id = rerun_data[!, :MatchID][r]
-    println(match_id)
-    pv_roof_space = rerun_data[!, :rooftop_area_m2][r]
+    match_id = data[!, :MatchID][r]
+    #println(match_id)
+    pv_roof_space = data[!, :rooftop_area_m2][r]
     #println(pv_roof_space)
     pv_roof_space = round(pv_roof_space * 10.7639, digits=4) #conversion from m2 to ft2
 
@@ -228,9 +223,11 @@ evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_c
     tilt_i=tilt_pv(latitude=lat, GCR=gcr_i, array_type=array_type_i)
     
     fname = string(match_id, ".csv") #name the csv file to that MatchID
-    println(r)
+    #println(r)
     counter = r
-    if !(fname in evaluated) || (fname in evaluated)
+    if !(fname in evaluated)
+        println(match_id)
+        sleep(3)
         try
             watts, ambient_temp_celcius = REopt.call_pvwatts_api(
                 lat, lon;
@@ -246,7 +243,7 @@ evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_c
                 radius=0,
                 time_steps_per_hour=1
             )
-            writedlm(joinpath("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_csvs/pvwatts_roof_csvs/", fname), watts, ',')
+            writedlm(joinpath("C:/GitRepos/Onsite_Energy_temporary/PVWatts_/pvwatts_roof_csvs/", fname), watts, ',')
         catch e
             @info e
         end
