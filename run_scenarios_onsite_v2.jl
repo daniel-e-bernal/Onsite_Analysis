@@ -318,13 +318,13 @@ end
                 simu_id = lpad(simu_id, 6, '0')
                 #estimated_or_real = find_match_id_row.energy_estimated_or_random[1]
                 #append!(electric_estimated_or_random, "$estimated_or_real")
-                #println("Got the simu_id = ", simu_id)
+                println("Got the simu_id = ", simu_id)
             end
             ng_load = [] 
             #find the MatchID in the natural gas file
             find_match_id_row_ng = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_ng)
             if isempty(find_match_id_row_ng)
-                #println("Did not find a MatchID for the natural gas consumption.")
+                println("Did not find a MatchID for the natural gas consumption.")
                 append!(ng_load, 0)
                 #append!(ng_estimated_or_random, "NaN")
             else #so if a match was found 
@@ -332,7 +332,7 @@ end
                 #estimated_or_real_ng = find_match_id_row_ng.Natural_Gas_Estimated_E_or_Random_R[1]
                 append!(ng_load, annual_ng_mmbtu)
                 #append!(ng_estimated_or_random, "$estimated_or_real_ng")
-                #println("The annual MMBtu consumption is  = ", annual_ng_mmbtu)
+                println("The annual MMBtu consumption is  = ", annual_ng_mmbtu)
             end
     
             #get the file path for the set file that contains the hourly loads 
@@ -351,14 +351,6 @@ end
         
         #get the selected cols from the df
         df = initial_df[:, cols]
-        df = df[df.state .!= "PR", :]
-        df = df[df.state .!= "VI", :]
-        df = df[.!ismissing.(df.latitude), :]
-        df = df[.!isnan.(df.latitude), :]
-        df = df[.!ismissing.(df.longitude), :]
-        df = df[.!isnan.(df.longitude), :]
-        df = df[.!ismissing.(df.MatchID), :]
-        df = df[.!ismissing.(df.rooftop_area_m2) .& .!ismissing.(df.solarPV_ground_area), :]
         return df 
     end
     
@@ -465,7 +457,7 @@ end
             land_acres = 0
         else 
             land_acres = round(land_acres / 4046.86, digits=4) #conversion from m2 to acres
-            #println("The land acres constraint is (acres): ", land_acres)
+            println("The land acres constraint is (acres): ", land_acres)
         end
         #roofspace conversion
         roof_space = 0
@@ -479,7 +471,7 @@ end
         else 
             roof_space = round(roof_space * 10.7639, digits=4) #conversion from m2 to ft2
         end
-        
+        println("The roof constraint is(sqft): ", roof_space)
         #get MatchID in data DataFrame to start getting other data from loads 
         match_id = data[!, :MatchID][i]
         println("The site's Match ID is: ", match_id)
@@ -504,7 +496,7 @@ end
         roof_fixed_prod_factor_series = prod_factors[1]
         ground_fixed_prod_factor_series = prod_factors[2]
         ground_axis_prod_factor_series = prod_factors[3]
-
+        println("Successfully got all production factors")
         #set variables outside for loop
         PV_ground_power_density = 0
         PV_roof_power_density = 0
@@ -541,11 +533,13 @@ end
                 input_data_site["PV"][name]["production_factor_series"] = roof_fixed_prod_factor_series
             end
         end
+        println("Sized PV")
         """ Below is attaining the REopt inputs related to aer_gen_co2e_c emissions to calculate BAU emissions."""
-        input_data_site["ElectricUtility"]["cambium_metric_col"] = "aer_gen_co2e_c"
+        #input_data_site["ElectricUtility"]["cambium_metric_col"] = "aer_gen_co2e_c"
         s1 = Scenario(input_data_site)
+        println("Executed the Scenario function successfully")
         inputs1 = REoptInputs(s1)
-
+        println("Passed first round of REopt inputs")
         #calculating capacity factors 
         PV_roof_capacity_factor = sum(roof_fixed_prod_factor_series) / 8760 #actual capacity factor
         PV_fixed_ground_cap_factor = sum(ground_fixed_prod_factor_series) / 8760 #actual capacity factor for fixed rack ground PV
@@ -567,14 +561,14 @@ end
         PV_ground_max_size_based_on_space = PV_fixed_ground_max_size_based_on_space
 
         inputs1.max_sizes["roof_fixed"] = PV_roof_max_size_based_n_space
-        #println("The PV roof max size based on space for $match_id is (acres): ", PV_roof_max_size_based_n_space)
+        println("The PV roof max size based on space for $match_id is (acres): ", PV_roof_max_size_based_n_space)
         #create global variables for PV sizes on roof and ground 
         roof_PV_size = 0
         ground_PV_size = 0
         one_axis_deployment = false
         #now re-set the sizes for PV on the roof and ground, with roof as the priority
         if PV_roof_max_size_based_on_load <= PV_roof_max_size_based_n_space
-            #println("PV roof max size based on load for $match_id is less than or equal to PV max size based on space.")
+            println("PV roof max size based on load for $match_id is less than or equal to PV max size based on space.")
             input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_on_load * 0.999
             roof_PV_size = PV_roof_max_size_based_on_load
             input_data_site["PV"][2]["max_kw"] = roof_PV_size
@@ -582,12 +576,12 @@ end
             ground_PV_size = 0 
             input_data_site["PV"][1]["max_kw"] = ground_PV_size
         elseif PV_roof_max_size_based_on_load > PV_roof_max_size_based_n_space
-            #println("PV roof max size based on load for $match_id is greater than PV max size based on space.")
+            println("PV roof max size based on load for $match_id is greater than PV max size based on space.")
             #fix the minimum kW for the roof 
             input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.999
             #identify the max kW for ground remainder after knowing the total load 
             roof_PV_size = PV_roof_max_size_based_n_space
-            #println("The PV roof size is: ", roof_PV_size)
+            println("The PV roof size is: ", roof_PV_size)
             input_data_site["PV"][2]["max_kw"] = roof_PV_size
             
             #get remaining kWh that need to be supplied by subtracting total load - load produced from roof PV
@@ -596,25 +590,25 @@ end
 
             #calculate ground size using fixed rack production factor
             ground_PV_size = production_defecit / (PV_fixed_ground_cap_factor * 8760)
-            #println("The FIRST pass to assign ground PV size for $match_id is: ", ground_PV_size)
+            println("The FIRST pass to assign ground PV size for $match_id is: ", ground_PV_size)
             ground_PV_size = ground_PV_size > PV_fixed_ground_max_size_based_on_space ? PV_fixed_ground_max_size_based_on_space : ground_PV_size
-            #println("The SECOND pass to assign ground PV size for $match_id is: ", ground_PV_size)
+            println("The SECOND pass to assign ground PV size for $match_id is: ", ground_PV_size)
             inputs1.max_sizes["ground_mount"] = PV_fixed_ground_max_size_based_on_space
             #sleep(10)
             
             #check if the remainder ground size is over 1354 kW, if so, then we need to simulate 1-axis which would equal 1000 kW
             if ground_PV_size > 1354 && PV_axis_ground_cap_factor != 0
-                #println("Switching to ground 1-axis PV")
+                println("Switching to ground 1-axis PV")
                 ground_PV_size = production_defecit / (PV_axis_ground_cap_factor * 8760)
-                #println("The FIRST pass to assign ground axis PV size for $match_id is: ", ground_PV_size)
+                println("The FIRST pass to assign ground axis PV size for $match_id is: ", ground_PV_size)
                 ground_PV_size = ground_PV_size > PV_axis_ground_max_size_based_on_space ? PV_axis_ground_max_size_based_on_space : ground_PV_size
-                #println("The FIRST pass to assign ground axis PV size for $match_id is: ", ground_PV_size)
+                println("The FIRST pass to assign ground axis PV size for $match_id is: ", ground_PV_size)
                 #if ground_PV_size > PV_axis_ground_max_size_based_on_space
                     #ground_PV_size = PV_axis_ground_max_size_based_on_space
                 #end
                 inputs1.max_sizes["ground_mount"] = PV_axis_ground_max_size_based_on_space
                 PV_ground_max_size_based_on_space = PV_axis_ground_max_size_based_on_space
-                #println("The PV ground max size based on space for $match_id is (acres): ", PV_axis_ground_max_size_based_on_space)
+                println("The PV ground max size based on space for $match_id is (acres): ", PV_axis_ground_max_size_based_on_space)
                 one_axis_deployment = true
                 #sleep(10)
             end
@@ -638,11 +632,11 @@ end
         end
         """ Below is attaining the REopt inputs related to srmer_co2e_c emissions to calculate BAU emissions."""
 
-        input_data_site["ElectricUtility"]["cambium_metric_col"] = "srmer_co2e_c"
+        #input_data_site["ElectricUtility"]["cambium_metric_col"] = "srmer_co2e_c"
         
         s2 = Scenario(input_data_site)
         inputs2 = REoptInputs(s2)
-
+        println("Passed second round of REopt inputs")
         PV_ground_prod_factor_series = one_axis_deployment == false ? ground_fixed_prod_factor_series : ground_axis_prod_factor_series
 
         #calculate actual production series (kWh)
@@ -704,7 +698,7 @@ end
         bau_inputs1 = REopt.BAUInputs(inputs1)
 
         BAU_emissions_aer_total = bau_inputs1.s.site.bau_emissions_lb_CO2_per_year == nothing ? 0.0 : bau_inputs1.s.site.bau_emissions_lb_CO2_per_year#this is an aggregate total electric + ng
-        #println("The total BAU emissions for # $i is: ", BAU_emissions_aer_total)
+        #println("The total BAU emissions for # i is: ", BAU_emissions_aer_total)
         BAU_grid_emissions_aer_total = bau_inputs1.s.site.bau_grid_emissions_lb_CO2_per_year == nothing ? 0.0 : bau_inputs1.s.site.bau_grid_emissions_lb_CO2_per_year#this is grid specific total emissions 
         BAU_grid_emissions_aer_series = bau_inputs1.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh == nothing ? 0.0 : bau_inputs1.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh #this is an 8760 series for grid emissions
 
@@ -715,8 +709,8 @@ end
         BAU_grid_emissions_srmer_series = bau_inputs2.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh == nothing ? 0.0 : bau_inputs2.s.electric_utility.emissions_factor_series_lb_CO2_per_kwh#this is an 8760 series for grid-electric related emissions 
 
         #add in lrmer emissions 
-        input_data_site["ElectricUtility"]["cambium_metric_col"] = "lrmer_co2e_c" """
-        """
+        input_data_site["ElectricUtility"]["cambium_metric_col"] = "lrmer_co2e_c" 
+        
         s3 = Scenario(input_data_site)
         inputs3 = REoptInputs(s3)
         bau_inputs3 = REopt.BAUInputs(inputs3)
@@ -762,29 +756,29 @@ end
             place_name = data[!, :place_name][i],
             #emissions information
             #aer minus srmer
-            BAU_emissions_aer_gen_co2e_c_wo_tech_no_ng = BAU_grid_emissions_aer_total == nothing ? 0.0 : BAU_grid_emissions_aer_total, #store BAU emissions before any tech is deployed
-            emissions_srmer_from_tech = srmer_emissions_delta == nothing ? 0.0 : srmer_emissions_delta, #store emission difference when tech is deployed using srmer, net load
-            RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech_no_ng = aer_minus_srmer_w_tech_emissions_grid == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_grid, #store BAU emissions calculated with aer_gen_co2e_c - srmer emissions from net load of tech deployment
-            PERCENT_CHANGE_from_bau_emissions_aer_srmer_emissions_w_tech_no_ng = aer_minus_srmer_w_tech_emissions_percent_change_grid == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_percent_change_grid, #percent 
-            RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech_w_ng = aer_minus_srmer_w_tech_emissions_site == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_site, #store BAU emissions calculated with aer_gen_co2e_c - srmer emissions from net load of tech deployment
-            PERCENT_CHANGE_from_bau_emissions_aer_srmer_emissions_w_tech_w_ng = aer_minus_srmer_w_tech_emissions_percent_change_site == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_percent_change_site, #percent 
+            BAU_emissions_aer_gen_co2e_c_wo_tech_no_ng = 0.0, # BAU_grid_emissions_aer_total == nothing ? 0.0 : BAU_grid_emissions_aer_total, #store BAU emissions before any tech is deployed
+            emissions_srmer_from_tech = 0.0, # srmer_emissions_delta == nothing ? 0.0 : srmer_emissions_delta, #store emission difference when tech is deployed using srmer, net load
+            RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech_no_ng = 0.0, # aer_minus_srmer_w_tech_emissions_grid == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_grid, #store BAU emissions calculated with aer_gen_co2e_c - srmer emissions from net load of tech deployment
+            PERCENT_CHANGE_from_bau_emissions_aer_srmer_emissions_w_tech_no_ng = 0.0, # aer_minus_srmer_w_tech_emissions_percent_change_grid == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_percent_change_grid, #percent 
+            RESULT_bau_emissions_aer_minus_srmer_emissions_w_tech_w_ng = 0.0, # aer_minus_srmer_w_tech_emissions_site == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_site, #store BAU emissions calculated with aer_gen_co2e_c - srmer emissions from net load of tech deployment
+            PERCENT_CHANGE_from_bau_emissions_aer_srmer_emissions_w_tech_w_ng = 0.0, # aer_minus_srmer_w_tech_emissions_percent_change_site == nothing ? 0.0 : aer_minus_srmer_w_tech_emissions_percent_change_site, #percent 
             #aer
-            RESULT_BAU_emissions_aer_minus_aer_emissions_w_tech_no_ng = aer_emissions_w_tech == nothing ? 0.0 : aer_emissions_w_tech, #store BAU emissions calculated with aer_gen_co2e_c - aer_gen_co2e_c emissions from net load of tech deployment 
-            PERCENT_CHANGE_from_bau_emissions_aer_aer_emissions_w_tech_no_ng = aer_emissions_w_tech_percent_change_grid == nothing ? 0.0 : aer_emissions_w_tech_percent_change_grid, #percent 
-            BAU_emissions_aer_gen_co2e_c_wo_tech_w_ng = BAU_emissions_aer_total == nothing ? 0.0 : BAU_emissions_aer_total,
-            PERCENT_CHANGE_from_bau_emissions_aer_aer_emissions_w_tech_w_ng = aer_emissions_w_tech_percent_change_site == nothing ? 0.0 : aer_emissions_w_tech_percent_change_site,
+            RESULT_BAU_emissions_aer_minus_aer_emissions_w_tech_no_ng = 0.0, # aer_emissions_w_tech == nothing ? 0.0 : aer_emissions_w_tech, #store BAU emissions calculated with aer_gen_co2e_c - aer_gen_co2e_c emissions from net load of tech deployment 
+            PERCENT_CHANGE_from_bau_emissions_aer_aer_emissions_w_tech_no_ng = 0.0, # aer_emissions_w_tech_percent_change_grid == nothing ? 0.0 : aer_emissions_w_tech_percent_change_grid, #percent 
+            BAU_emissions_aer_gen_co2e_c_wo_tech_w_ng = 0.0, # BAU_emissions_aer_total == nothing ? 0.0 : BAU_emissions_aer_total,
+            PERCENT_CHANGE_from_bau_emissions_aer_aer_emissions_w_tech_w_ng = 0.0, # aer_emissions_w_tech_percent_change_site == nothing ? 0.0 : aer_emissions_w_tech_percent_change_site,
             #srmer
-            BAU_emissions_srmer_co2e_wo_tech_no_ng = BAU_grid_emissions_srmer_total == nothing ? 0.0 : BAU_grid_emissions_srmer_total, #store BAU emissions if not using aer but using srmer for the base case 
-            RESULT_bau_emissions_srmer_minus_srmer_emissions_w_tech_no_ng = srmer_emissions_w_tech == nothing ? 0.0 : srmer_emissions_w_tech, #emissions using srmer for base case and tech deployment case 
-            PERCENT_CHANGE_from_bau_emissions_srmer_srmer_emissions_w_tech_no_ng = srmer_emissions_w_tech_percent_change_grid == nothing ? 0.0 : srmer_emissions_w_tech_percent_change_grid, #percent
-            BAU_emissions_srmer_co2e_wo_tech_w_ng = BAU_emissions_srmer_total == nothing ? 0.0 : BAU_emissions_srmer_total,
-            PERCENT_CHANGE_from_bau_emissions_srmer_srmer_emissions_w_tech_w_ng = srmer_emissions_w_tech_percent_change_site == nothing ? 0.0 : srmer_emissions_w_tech_percent_change_site, #percent  
+            BAU_emissions_srmer_co2e_wo_tech_no_ng = 0.0, # BAU_grid_emissions_srmer_total == nothing ? 0.0 : BAU_grid_emissions_srmer_total, #store BAU emissions if not using aer but using srmer for the base case 
+            RESULT_bau_emissions_srmer_minus_srmer_emissions_w_tech_no_ng = 0.0, # srmer_emissions_w_tech == nothing ? 0.0 : srmer_emissions_w_tech, #emissions using srmer for base case and tech deployment case 
+            PERCENT_CHANGE_from_bau_emissions_srmer_srmer_emissions_w_tech_no_ng = 0.0, # srmer_emissions_w_tech_percent_change_grid == nothing ? 0.0 : srmer_emissions_w_tech_percent_change_grid, #percent
+            BAU_emissions_srmer_co2e_wo_tech_w_ng = 0.0, # BAU_emissions_srmer_total == nothing ? 0.0 : BAU_emissions_srmer_total,
+            PERCENT_CHANGE_from_bau_emissions_srmer_srmer_emissions_w_tech_w_ng = 0.0, # srmer_emissions_w_tech_percent_change_site == nothing ? 0.0 : srmer_emissions_w_tech_percent_change_site, #percent  
             #lrmer 
-            BAU_emissions_lrmer_co2e_wo_tech_no_ng = BAU_grid_emissions_lrmer_total == nothing ? 0.0 : BAU_grid_emissions_lrmer_total, #store BAU emissions 
-            RESULT_bau_emissions_lrmer_minus_lrmer_emissions_w_tech_no_ng = lrmer_emissions_w_tech == nothing ? 0.0 : lrmer_emissions_w_tech, #emissions using lrmer for base case and tech deployment case 
-            PERCENT_CHANGE_from_bau_emissions_lrmer_lrmer_emissions_w_tech_no_ng = lrmer_emissions_w_tech_percent_change_grid == nothing ? 0.0 : lrmer_emissions_w_tech_percent_change_grid, #percent 
-            BAU_emissions_lrmer_co2e_wo_tech_w_ng = BAU_emissions_lrmer_total == nothing ? 0.0 : BAU_emissions_lrmer_total,
-            PERCENT_CHANGE_from_bau_emissions_lrmer_lrmer_emissions_w_tech_w_ng = lrmer_emissions_w_tech_percent_change_site == nothing ? 0.0 : lrmer_emissions_w_tech_percent_change_site #percent 
+            BAU_emissions_lrmer_co2e_wo_tech_no_ng = 0.0, # BAU_grid_emissions_lrmer_total == nothing ? 0.0 : BAU_grid_emissions_lrmer_total, #store BAU emissions 
+            RESULT_bau_emissions_lrmer_minus_lrmer_emissions_w_tech_no_ng = 0.0, # lrmer_emissions_w_tech == nothing ? 0.0 : lrmer_emissions_w_tech, #emissions using lrmer for base case and tech deployment case 
+            PERCENT_CHANGE_from_bau_emissions_lrmer_lrmer_emissions_w_tech_no_ng = 0.0, # lrmer_emissions_w_tech_percent_change_grid == nothing ? 0.0 : lrmer_emissions_w_tech_percent_change_grid, #percent 
+            BAU_emissions_lrmer_co2e_wo_tech_w_ng = 0.0, # BAU_emissions_lrmer_total == nothing ? 0.0 : BAU_emissions_lrmer_total,
+            PERCENT_CHANGE_from_bau_emissions_lrmer_lrmer_emissions_w_tech_w_ng = 0.0 # lrmer_emissions_w_tech_percent_change_site == nothing ? 0.0 : lrmer_emissions_w_tech_percent_change_site #percent 
         )
 
         println("Completed runs number $i")
@@ -892,16 +886,18 @@ end
 ## Read the files
 scenarios = read_csv_parcel_file(parcel_file)
 match_id = scenarios[!, :MatchID]
-evaluated = readdir("C:/GitRepos/Onsite_Energy_temporary/results/PV/results/")
+evaluated = readdir("D:/Onsite_energy_temporary/results/PV/analysis_runs/")
+evaluated2 = readdir("C:/GitRepos/Onsite_Energy_temporary/results/PV/results/")
 end_run = length(match_id)
 println("Total # of runs are: ", end_run)
 
 @info size(scenarios)
         
 @time pmap(1:end_run) do i
-    fname = string(match_id[i], "_PV_run_result.csv")
+    fname = string(match_id[i], "_PV_analysis_runs.json")
+    fname2 = string(match_id[i], "_PV_run_result.csv")
     try
-        if !(fname in evaluated) 
+        if !(fname in evaluated)  && !(fname2 in evaluated2)
             # Pass a vector of values for each site.
             #println(i, "and type of object is: ", typeof(i))
             @time run_site(i)
