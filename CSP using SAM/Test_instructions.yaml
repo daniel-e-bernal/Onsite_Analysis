@@ -1,0 +1,16 @@
+This file is to include the type of data that you'll get from the Sitelist csv file.
+
+Below we will tell you the column names that you will use.
+
+  Site Identifier = "MatchID"
+  Area or land available = "wind_ground_area"
+  #this is in meters squared
+  Latitude = "parcel_latitude"
+  Longitude = "parcel_longitude"
+  Wind exclusion = "wind_exclusion" #this is boolean (TRUE or FALSE)
+Those may be all of the columns that you should be interested in.
+"
+
+For running the CSP models, here’s the list of attributes that are needed:
+
+attributes = "ghi, dhi, dni, wind_speed, wind_direction, air_temperature, surface_pressure, dew_point"
