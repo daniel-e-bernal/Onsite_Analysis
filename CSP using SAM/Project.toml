@@ -1,0 +1,7 @@
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+FilePaths = "8fc22ac5-c921-52a6-82fd-178b2807b824"
+Pickle = "fbb45041-c46e-462f-888f-7c521cafbc2c"
+XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
