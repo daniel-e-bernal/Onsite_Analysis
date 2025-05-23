@@ -89,7 +89,7 @@ function set_ssc_data_from_dict(D,model,data)
     end
 end
 
-function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO: Add option functions
+function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO: facility_id is going to be a string
     ### Function input definitions
     # csp_type (String) = type of csp technology
     # facility_id (Int) = Integer assigned to that facility, will be used for referencing weather files, saving results, etc.
@@ -152,7 +152,7 @@ function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO:
         else
             println("SAM Simulation Successful.")
         end
-        
+
         ### Retrieve results
         outputs_dict = Dict(
             "trough" => ["P_out_net","total_land_area"], # Units: [MWe, acre]
@@ -182,7 +182,7 @@ function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO:
             end
         end
         ### ADD System size parameters that 
-        df_summary = Dict("Annual Electricity, Net [MWh]" => sum(annual_energy),
+        results_summary = Dict("Annual Electricity, Net [MWh]" => sum(annual_energy),
                                "Electricity Produced [MW]" => annual_energy,
                                "Total Area [acre]" => total_area,
                                "Solar Multiple [-]" => sm,
@@ -195,7 +195,7 @@ function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO:
 
     end
     
-    return df_summary
+    return results_summary 
 end
 
 # models = ["trough"] #,"fresnel","mst"]
@@ -204,7 +204,26 @@ end
 #     result = run_ssc(m,100,200.0)
 # end
 
+function store_ssc(result::Dict,csp_type::String,facility_id::Int,option::String)
+    # Determine the max length of the array values
+    maxlen = maximum([isa(v, AbstractArray) ? length(v) : 1 for v in values(result)])
 
+    # Normalize: expand scalars to [value, "", "", ...]
+    normalized = Dict{String, Vector}()
+
+    for (k, v) in result
+        if isa(v, AbstractArray)
+            normalized[k] = v
+        else
+            normalized[k] = [string(v); fill("", maxlen - 1)]
+        end
+    end
+
+    # Convert to DataFrame and write CSV
+    result_df = DataFrame(normalized)
+    result_string = joinpath(@__DIR__,"results",csp_type,string("Option",option),"result_" * string(facility_id) * ".csv") 
+    CSV.write(result_string, result_df )
+end
 
 
 function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_power::Float64,annual_demand::Float64,available_area::Float64; tol=0.01, max_iter=100,damping_factor=0.75)
@@ -228,6 +247,7 @@ function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_p
             println(string("Error ratio: ",string(round(error_ratio,digits=4))))
             if abs(error_ratio) <= tol
                 println("Converged after $i iterations.")
+                store_ssc(result,csp_type,facility_id,option)
                 return rated_power
             end
 
@@ -247,6 +267,7 @@ function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_p
             println(string("Error ratio: ",string(round(error_ratio,digits=4))))
             if abs(error_ratio) <= tol
                 println("Converged after $i iterations.")
+                # store_ssc(result)
                 return rated_power
             end
 
@@ -263,7 +284,7 @@ end
 csp_type = "trough"
 facility_id = 100
 option = "C"
-peak_power = 100.0
+peak_power = 150.0
 annual_demand = 100.0*8760
 println(string("Annual Energy Demand [Mwh]: ", string(round(Int,annual_demand))))
 available_area = 300.0
