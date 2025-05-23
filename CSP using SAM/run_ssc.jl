@@ -54,12 +54,6 @@ end
 function set_ssc_data_from_dict(D,model,data)
     j = 0
     for (key, value) in D
-        # if key == "solar_resource_file"
-        #     print(typeof(value))
-        #     continue
-        # elseif typeof(value) == String
-        #     @ccall hdl.ssc_data_set_string(data::Ptr{Cvoid},key::Cstring,D[key]::Cstring)::Cvoid
-        #     j += 1
         if typeof(value) == String
             @ccall hdl.ssc_data_set_string(data::Ptr{Cvoid},key::Cstring,D[key]::Cstring)::Cvoid
             j += 1
@@ -75,16 +69,10 @@ function set_ssc_data_from_dict(D,model,data)
                 end
             end
             if ncols == 1 && (nrows > 2 || model == "mst") || (model == "fresnel" && key == "ppa_price_input")
-                # if key == "ppa_price_input"
-                #     println("I am assigning ppa_prive_input as an array.")
-                # end
                 c_matrix = convert(Array{Float64},c_matrix)
                 @ccall hdl.ssc_data_set_array(data::Ptr{Cvoid},key::Cstring,c_matrix::Ptr{Cdouble},length(D[key])::Cint)::Cvoid
                 j += 1
             else
-                # if key == "ppa_price_input"
-                #     println("I am assigning ppa_prive_input as a matrix.")
-                # end
                 c_matrix = convert(Array{Float64},c_matrix)
                 @ccall hdl.ssc_data_set_matrix(data::Ptr{Cvoid},key::Cstring,c_matrix::Ptr{Cdouble},Cint(nrows)::Cint,Cint(ncols)::Cint)::Cvoid
                 j += 1
@@ -101,31 +89,25 @@ function set_ssc_data_from_dict(D,model,data)
     end
 end
 
-function run_ssc(cst_type::String,facility_id::Int,rated_power_electric::Float64)
-    model = cst_type
+function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO: Add option functions
+    ### Function input definitions
+    # csp_type (String) = type of csp technology
+    # facility_id (Int) = Integer assigned to that facility, will be used for referencing weather files, saving results, etc.
+    # rated_power (Float) = Peak electrical demand of the facility [MW]
+    
+    model = csp_type
     # relates internal names to specific models in SAM
-    # TODO: Update load profile/dispatch to be equal to 8760 of rated power electric
-    # TODO: Molten salt --> ideally we want optimize tower height and heliostat layout for each facility
     model_ssc = Dict(
         "trough" => "trough_physical",
         "fresnel" => "fresnel_physical",
         "mst" => "tcsmolten_salt"
     ) 
-    # Assign all defaults
-    defaults_file = joinpath(@__DIR__,"sam","defaults","defaults_" * model_ssc[model] * ".json") 
-    defaults = JSON.parsefile(defaults_file)
-
-    # Set inputs (only updating weather file location)
-    defaults["solar_resource_file"] = joinpath(@__DIR__,"weatherfiles","weatherfile_" * string(facility_id) * ".csv") 
-
-    # TODO: Add in design electric power assuming a SM = 3 based on given land
     
-
     R = Dict()
     error = ""
     
     if !(model in collect(keys(model_ssc)))
-        error =  error * "Model is not available at this time. \n"
+        println("Model is not available at this time")
     else
         ### Setup SSC
         global hdl = nothing
@@ -133,21 +115,45 @@ function run_ssc(cst_type::String,facility_id::Int,rated_power_electric::Float64
         global hdl = joinpath(@__DIR__, "sam", libfile)
         ssc_module = @ccall hdl.ssc_module_create(model_ssc[model]::Cstring)::Ptr{Cvoid}
         data = @ccall hdl.ssc_data_create()::Ptr{Cvoid}  # data pointer
-        @ccall hdl.ssc_module_exec_set_print(1::Cint)::Cvoid # change to 1 to print outputs/errors (for debugging)
+        @ccall hdl.ssc_module_exec_set_print(0::Cint)::Cvoid # 1 to print outputs/errors (for debugging)
 
-        ### Set inputs/defaults
+        ### Set defaults
+        defaults_file = joinpath(@__DIR__,"sam","defaults","defaults_" * model_ssc[model] * ".json") 
+        defaults = JSON.parsefile(defaults_file)
+
+        # Set inputs (only updating weather file location)
+        defaults["solar_resource_file"] = joinpath(@__DIR__,"weatherfiles","weatherfile_" * string(facility_id) * ".csv") 
+
+        sm = 3.0 # This is going to be a constant, external function sets rated power
+        if model in ["trough"]
+            defaults["P_ref"] = rated_power
+            defaults["use_solar_mult_or_aperture_area"] = 0 # 0 = use solar multiple
+            defaults["specified_solar_multiple"] = sm
+            defaults["tshours"] = 12.0
+        elseif model in ["fresnel"]
+            defaults["P_ref"] = rated_power 
+            defaults["use_solar_mult_or_aperture_area"] = 0 # 0 = use solar multiple
+            defaults["specified_solar_multiple"] = sm
+            defaults["tshours"] = 12.0
+        else #model in ["mst"]
+            defaults["P_ref"] = rated_power 
+            defaults["field_model_type"] = 0 # 0 = optimize tower height and heliostat field
+            defaults["solarm"] = sm
+            defaults["tshours"] = 12.0
+        end
+
         set_ssc_data_from_dict(defaults,model,data)
 
         ### Execute simulation
         test = @ccall hdl.ssc_module_exec(ssc_module::Ptr{Cvoid}, data::Ptr{Cvoid})::Cint
         #println(test)
         if test != 1
-            println(string("Test = ", test,". SAM Simulation Failed."))
+            println("SAM Simulation Failed.")
         else
-            println(string("Test = ", test,". SAM Simulation Successful."))
+            println("SAM Simulation Successful.")
         end
-        ### Retrieve results
         
+        ### Retrieve results
         outputs_dict = Dict(
             "trough" => ["P_out_net","total_land_area"], # Units: [MWe, acre]
             "fresnel" => ["P_out_net","total_land_area"], # Units: [MWe, acre]
@@ -166,10 +172,6 @@ function run_ssc(cst_type::String,facility_id::Int,rated_power_electric::Float64
                     push!(annual_energy,unsafe_load(c_response,i))  # For array type outputs
                 end
                 println(string("Annual Electricity Production [MWhe]: ",round(Int,sum(annual_energy))))
-                #annual_energy_string = joinpath(@__DIR__, "results", string(model), string("annual_energy_MW_",facility_id,".csv"))
-                #df_annual_energy = DataFrame("Electricity Produced [MW]" => annual_energy)
-                #CSV.write(annual_energy_string,df_annual_energy)
-                #R[k] = sum(annual_energy)
 
             elseif k in ["total_land_area"]
                 val = convert(Cdouble, 0.0)
@@ -178,27 +180,93 @@ function run_ssc(cst_type::String,facility_id::Int,rated_power_electric::Float64
                 total_area = Float64(ref[])
                 println(string("Total Land Area [acre]: ",round(Int,total_area)))
             end
-            ### Can we get rated power (electric and thermal) as well as total area
-            
         end
-        df_summary = DataFrame("Annual Electricity, Net [MWh]" => sum(annual_energy),
+        ### ADD System size parameters that 
+        df_summary = Dict("Annual Electricity, Net [MWh]" => sum(annual_energy),
                                "Electricity Produced [MW]" => annual_energy,
-                               "Total Area [acre]" => total_area)
-        df_summary_string = joinpath(@__DIR__, "results", string(model), string("results_",model,"_",facility_id,".csv"))
-        CSV.write(df_summary_string,df_summary)
+                               "Total Area [acre]" => total_area,
+                               "Solar Multiple [-]" => sm,
+                               "Rated Power [MW]" => rated_power,
+                               "Capacity Factor [-]" => sum(annual_energy)/(8760*rated_power))
+        
         ### Free SSC
         @ccall hdl.ssc_module_free(ssc_module::Ptr{Cvoid})::Cvoid   
         @ccall hdl.ssc_data_free(data::Ptr{Cvoid})::Cvoid
 
     end
     
-    ### Check for errors
-    if error == ""
-        error = "No errors found."
-    end
-    R["error"] = error
-    #return R
-    return R
+    return df_summary
 end
 
-result = run_ssc("mst",100,200.0)
+# models = ["trough"] #,"fresnel","mst"]
+# for m in models
+#     println(m)
+#     result = run_ssc(m,100,200.0)
+# end
+
+
+
+
+function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_power::Float64,annual_demand::Float64,available_area::Float64; tol=0.01, max_iter=100,damping_factor=0.75)
+    ### Function input definitions
+    # csp_type (String) : type of csp technology
+    # facility_id (Int) : Integer assigned to that facility, will be used for referencing weather files, saving results, etc.
+    # option (String) : A = no export; B = annual load; C = maximum area
+    # peak_power (Float) : Facility's peak electrical demand [MW]
+    # annual_demand (Float) : Annual total electricity demanded at the facility [MWhe]
+    # available_area (Float) : Total available land at facility [acre]
+    # tol (Float) : tolerance of convergence
+    # max_iter (Int) : maximum number of iterations to converge
+    # damping_factor (float) : iteration term to prevent unstable oscillations
+    if option in ["B"]
+        rated_power = peak_power
+        for i in 1:max_iter
+            result = run_ssc(csp_type,facility_id,rated_power)
+            annual_generation = result["Annual Electricity, Net [MWh]"]
+            #print(annual_generation)
+            error_ratio = (annual_generation - annual_demand) / annual_demand
+            println(string("Error ratio: ",string(round(error_ratio,digits=4))))
+            if abs(error_ratio) <= tol
+                println("Converged after $i iterations.")
+                return rated_power
+            end
+
+            # Adjust rated power proportionally
+            rated_power *= 1 / (1 + damping_factor*error_ratio)
+        end
+
+        println("Did not converge after $max_iter iterations.")
+        return rated_power
+    elseif option in ["C"]
+        rated_power = peak_power
+        for i in 1:max_iter
+            result = run_ssc(csp_type,facility_id,rated_power)
+            total_area = result["Total Area [acre]"]
+            #print(annual_generation)
+            error_ratio = (total_area - available_area) / available_area
+            println(string("Error ratio: ",string(round(error_ratio,digits=4))))
+            if abs(error_ratio) <= tol
+                println("Converged after $i iterations.")
+                return rated_power
+            end
+
+            # Adjust rated power proportionally
+            rated_power *= 1 / (1 + damping_factor*error_ratio)
+        end
+
+        println("Did not converge after $max_iter iterations.")
+        return rated_power
+    end
+    
+end
+
+csp_type = "trough"
+facility_id = 100
+option = "C"
+peak_power = 100.0
+annual_demand = 100.0*8760
+println(string("Annual Energy Demand [Mwh]: ", string(round(Int,annual_demand))))
+available_area = 300.0
+rated_power = run_ssc_options(csp_type,facility_id,option,peak_power,annual_demand,available_area)
+print(rated_power)
+
