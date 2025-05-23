@@ -6,6 +6,8 @@ The functions are:
     C) resource data match **may be updated**
 """
 
+using DataFrames, FilePaths, CSV, XLSX, DelimitedFiles, Pickle
+
 # Get load data 
 function get_load_data(;
     match_id::Any,
@@ -226,3 +228,98 @@ function get_wind_parameters2(;
         return nothing
     end
 end
+
+
+#=
+I need to create a function that reads the match id in the LC_facility_parcels_NREL_05_18_25_TEST.csv file.
+    Then, using the MatchID, go into the path folder C:\Users\dbernal\Downloads\ITO Load Profiles\ to extract the matching load profile.
+    Once it finds the matching load profile, it should create an individual csv file with that load profile naming the file with the MatchID.
+=#
+function create_load_profile_csv( 
+    match_id::Any,
+    folder_path_e::String = "C:/Users/dbernal/Downloads/ITO Load Profiles/", #the electric loads folder path
+    traits_file::String = "Load Facility Traits Set ",
+    set_file::String = "Load Profiles Set ",
+    output_folder::String = "./tests/Load Profiles/",
+    override_existing_file::Bool = true) #output folder for the csv file
+
+    if !override_existing_file
+        println("Not overriding existing file")
+        return
+    end
+    println("Overriding existing file")
+
+    #prepare to intake any type of String
+    if match_id isa String31
+        match_id = String(match_id)  # Convert String31 to String
+    elseif match_id isa AbstractString
+        match_id = String(match_id)  # Handle other strings
+    elseif match_id isa String15
+        match_id = String(match_id)
+    else
+        match_id
+    end
+    
+    #the files are numbered, therefore, we'll set a counter     
+    counter = 0
+    max_counter = 34
+
+    #create empty DataFrame to store the electric load profile
+    df = DataFrame()
+
+    while true
+        #check counter 
+        if counter == max_counter
+            return 0 #exit loop
+        end
+
+        #we get the traits path first 
+        file_path_e = joinpath(folder_path_e, "$traits_file$(string(counter)).csv")
+        file_e = CSV.read(file_path_e, DataFrame)
+
+        #empty simu_id 
+        simu_id = nothing
+
+        #find the MatchID in the electric loads file 
+        find_match_id_row = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_e)
+        if isempty(find_match_id_row)
+            println("Got stuck trying to find a match file", counter)
+            counter += 1
+            continue
+        else #so if a match was found 
+            simu_id = find_match_id_row.simulationID[1]
+            simu_id = lpad(simu_id, 6, '0')
+            #estimated_or_real = find_match_id_row.energy_estimated_or_random[1]
+            #append!(electric_estimated_or_random, "$estimated_or_real")
+            println("Got the simu_id = ", simu_id)
+        end
+        println("Onto the next step")
+        #get the file path for the set file that contains the hourly loads 
+        file_path_s = joinpath(folder_path_e, "$set_file$(string(counter)).csv")
+        file_s = CSV.read(file_path_s, DataFrame)
+        #electric_hourly_load = []
+        #append!(electric_hourly_load, file_s[!, simu_id])
+        df[!, :Load] = file_s[!, simu_id]
+        save_to_csv(df, output_folder, match_id)
+        println("The load profile for $match_id has been created in the folder $output_folder")
+        break #exit loop
+    end
+end
+    
+#save to CSV file function
+function save_to_csv(data::DataFrame, file_path::String, name::String)
+    #create file path
+    file = joinpath(file_path, "$name.csv")
+
+    # Write DataFrame to a new or existing CSV file
+    if isfile(file)
+        # Append new data to the CSV file
+        open(file, "a") do io
+            CSV.write(io, df, header=true)  # Append without headers
+        end
+    else
+        # Write DataFrame to a new CSV file
+        CSV.write(file, data)
+    end
+end
+
