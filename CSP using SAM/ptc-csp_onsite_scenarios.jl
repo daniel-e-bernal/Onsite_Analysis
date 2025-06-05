@@ -1,5 +1,5 @@
 """
-The information below is the running variables for the CSP onsite scenarios.
+The information below is the running variables for the parabolic troughts (PTC) CSP onsite scenarios.
 
     csp_type = "trough"
     facility_id = 100
@@ -11,6 +11,8 @@ The information below is the running variables for the CSP onsite scenarios.
     rated_power = run_ssc_options(csp_type,facility_id,option,peak_power,annual_demand,available_area)
     print(rated_power)
 """
+
+using CSV, DataFrames, DelimitedFiles
 
 #columns to select from csv file for parcel data
 cols = [:MatchID, :naicsCode, :place_name, :parcel_latitude, :parcel_longitude, :latitude, :longitude, 
@@ -42,7 +44,7 @@ sitelist_csv_path = "./tests/Sitelist/LC_facility_parcels_NREL_05_18_25_TEST_CSP
 #get data 
 data = read_csv_parcel_file(sitelist_csv_path)
 
-#create a function to run the CSP model
+#create a function to run the CSP model specifying the sizing option and the site index
 function run_csp(i::Int, option::String)
 
     #check that the option is a String and that it is one of the options A, B, or C 
@@ -76,18 +78,7 @@ function run_csp(i::Int, option::String)
         land_acres = round(land_acres / 4046.86, digits=4) #conversion from m2 to acres
         println("The land acres constraint is (acres): ", land_acres)
     end
-    #roofspace conversion
-    roof_space = 0
-    roof_space = data[!, :rooftop_area_m2][i]
-    if ismissing(roof_space) || isnan(roof_space)
-        roof_space = 0
-    elseif isa(roof_space, String) 
-        roof_space = String(roof_space)
-        roof_space = convert_string_to_float(roof_space)
-        roof_space = round(roof_space * 10.7639, digits=4) #conversion from m2 to ft2
-    else 
-        roof_space = round(roof_space * 10.7639, digits=4) #conversion from m2 to ft2
-    end
+
     #SAM takes in area in acres 
     #
 
@@ -96,8 +87,8 @@ function run_csp(i::Int, option::String)
     match_id = data[!, :MatchID][i]
     #println("The site's Match ID is: ", match_id)
 
-    #create the file name for this specific site + PV (the other version is Wind)
-    file_name = string(match_id, "")
+    #create the file name for this specific site + CSP type "_ptc" (the other versios are "_pt" and "_lfr")
+    file_name = string(match_id, "_ptc")
     site_load_info = get_load_data(match_id=match_id, folder_path_e=electric_load_folder_path, folder_path_ng=ng_load_folder_path)
     load_vector = site_load_info[1]
     
@@ -111,7 +102,15 @@ function run_csp(i::Int, option::String)
     annual_demand = sum(load_vector / 1000) # from the load profile 100.0*8760
     println(string("Annual Energy Demand [Mwh]: ", string(round(Int,annual_demand))))
     available_area = land_acres # acres gotten above 
-    rated_power = run_ssc_options(csp_type,facility_id,option,peak_power,annual_demand,available_area)
+    #= run_ssc_options includes:
+        csp_type - established as ptc or "trough", 
+        facility_id = match_id, 
+        option - established at the top of the function,
+        peak_power - got from load_vector, 
+        annual_demand - got from load_vector, 
+        available_area = land_acres
+    =#
+    rated_power = run_ssc_options(csp_type, facility_id, option, peak_power, annual_demand, land_acres)
     print(rated_power)
 
 end
@@ -119,7 +118,7 @@ end
 ## Read the data
 scenarios = read_csv_parcel_file(parcel_file)
 match_id = scenarios[!, :MatchID]
-evaluated = readdir("./results/PTC/")
+evaluated = readdir("./results/trough/")
 
 #get ids 
 task_id = ENV["SLURM_ARRAY_TASK_ID"]
