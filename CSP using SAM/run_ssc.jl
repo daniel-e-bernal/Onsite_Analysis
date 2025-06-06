@@ -6,12 +6,15 @@ using DataFrames
 using CSV
 using Base.Iterators
 
-function get_weatherdata(lat::Float64,lon::Float64,debug::Bool)
+function get_weatherdata(;lat::Float64, lon::Float64, debug::Bool, api_dv::String, facility_id::String)
     ### Call NSRDB
     # api_jgifford = "wKt35uq0aWoNHnzuwbcUxElPhVuo0K18YPSgZ9Ph"
     api_jgifford = "IOEFhaZoaOxkB2l9XvkaFswXgTsJxRqob1hBbPdv" #as of 9/13/2024 2pm
+    if api_dv == "" #if it is empty, use the default api key
+        api_dv = api_jgifford  #as of 9/13/2024 2pm
+    end
     attributes_tmy = "ghi,dhi,dni,wind_speed,wind_direction,air_temperature,surface_pressure,dew_point"
-    url = string("http://developer.nrel.gov/api/nsrdb/v2/solar/psm3-2-2-tmy-download.csv?api_key=",api_jgifford,
+    url = string("http://developer.nrel.gov/api/nsrdb/v2/solar/psm3-2-2-tmy-download.csv?api_key=",api_dv,
         "&wkt=POINT(",lon,"%20",lat,")&attributes=",attributes_tmy,
         "&names=tmy&utc=false&leap_day=true&interval=60&email=jeffrey.gifford@nrel.gov")
     # r = HTTP.request("GET", url)
@@ -19,10 +22,10 @@ function get_weatherdata(lat::Float64,lon::Float64,debug::Bool)
     df = DataFrame(CSV.File(HTTP.get(url).body,delim=",",silencewarnings=true))
     
     ### Write csv file for checking (can comment out/delete when not debugging)
-    debug = false
+    #debug = false
     if debug
-        weatherfile_string = string("weatherfile_",lat,"_",lon,"_wdir.csv")
-        CSV.write(weatherfile_string,df)
+        weatherfile_path = joinpath(@__DIR__,"weatherfiles", "weatherfile_$(facility_id)_wdir.csv")
+        CSV.write(weatherfile_path, df)
     end
     
     ### Create weather data dataframe for SAM
@@ -51,6 +54,7 @@ function get_weatherdata(lat::Float64,lon::Float64,debug::Bool)
     
     return weatherdata
 end
+
 function set_ssc_data_from_dict(D,model,data)
     j = 0
     for (key, value) in D
@@ -89,10 +93,10 @@ function set_ssc_data_from_dict(D,model,data)
     end
 end
 
-function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO: facility_id is going to be a string
+function run_ssc(csp_type::String, facility_id::String, rated_power::Float64) 
     ### Function input definitions
     # csp_type (String) = type of csp technology
-    # facility_id (Int) = Integer assigned to that facility, will be used for referencing weather files, saving results, etc.
+    # facility_id (String) = String assigned to that facility, will be used for referencing weather files, saving results, etc.
     # rated_power (Float) = Peak electrical demand of the facility [MW]
     
     model = csp_type
@@ -122,7 +126,7 @@ function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO:
         defaults = JSON.parsefile(defaults_file)
 
         # Set inputs (only updating weather file location)
-        defaults["solar_resource_file"] = joinpath(@__DIR__,"weatherfiles","weatherfile_" * string(facility_id) * ".csv") 
+        defaults["solar_resource_file"] = joinpath(@__DIR__, "weatherfiles", "weatherfile_$(facility_id)_wdir.csv") 
 
         sm = 3.0 # This is going to be a constant, external function sets rated power
         if model in ["trough"]
@@ -142,7 +146,7 @@ function run_ssc(csp_type::String,facility_id::Int,rated_power::Float64) # TODO:
             defaults["tshours"] = 12.0
         end
 
-        set_ssc_data_from_dict(defaults,model,data)
+        set_ssc_data_from_dict(defaults, model, data)
 
         ### Execute simulation
         test = @ccall hdl.ssc_module_exec(ssc_module::Ptr{Cvoid}, data::Ptr{Cvoid})::Cint
@@ -204,7 +208,7 @@ end
 #     result = run_ssc(m,100,200.0)
 # end
 
-function store_ssc(result::Dict,csp_type::String,facility_id::Int,option::String)
+function store_ssc(result::Dict, csp_type::String, facility_id::String, option::String)
     # Determine the max length of the array values
     maxlen = maximum([isa(v, AbstractArray) ? length(v) : 1 for v in values(result)])
 
@@ -221,12 +225,12 @@ function store_ssc(result::Dict,csp_type::String,facility_id::Int,option::String
 
     # Convert to DataFrame and write CSV
     result_df = DataFrame(normalized)
-    result_string = joinpath(@__DIR__,"results",csp_type,string("Option",option),"result_" * string(facility_id) * ".csv") 
+    result_string = joinpath(@__DIR__, "results", csp_type, string("option ",option), "result_$(facility_id)_$(csp_type).csv") 
     CSV.write(result_string, result_df )
 end
 
 
-function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_power::Float64,annual_demand::Float64,available_area::Float64; tol=0.01, max_iter=100,damping_factor=0.75)
+function run_ssc_options(csp_type::String, facility_id::String, option::String, peak_power::Float64, annual_demand::Float64, available_area::Float64; tol=0.01, max_iter=100, damping_factor=0.75)
     ### Function input definitions
     # csp_type (String) : type of csp technology
     # facility_id (Int) : Integer assigned to that facility, will be used for referencing weather files, saving results, etc.
@@ -240,15 +244,16 @@ function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_p
     if option in ["B"]
         rated_power = peak_power
         for i in 1:max_iter
-            result = run_ssc(csp_type,facility_id,rated_power)
+            result = run_ssc(csp_type, facility_id, rated_power)
             annual_generation = result["Annual Electricity, Net [MWh]"]
             #print(annual_generation)
             error_ratio = (annual_generation - annual_demand) / annual_demand
             println(string("Error ratio: ",string(round(error_ratio,digits=4))))
             if abs(error_ratio) <= tol
                 println("Converged after $i iterations.")
-                store_ssc(result,csp_type,facility_id,option)
-                return rated_power
+                store_ssc(result, csp_type, facility_id, option)
+                println("Final Rated Power: ", rated_power)
+                return result
             end
 
             # Adjust rated power proportionally
@@ -256,19 +261,19 @@ function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_p
         end
 
         println("Did not converge after $max_iter iterations.")
-        return rated_power
+        return result
     elseif option in ["C"]
         rated_power = peak_power
         for i in 1:max_iter
-            result = run_ssc(csp_type,facility_id,rated_power)
+            result = run_ssc(csp_type, facility_id, rated_power)
             total_area = result["Total Area [acre]"]
             #print(annual_generation)
             error_ratio = (total_area - available_area) / available_area
             println(string("Error ratio: ",string(round(error_ratio,digits=4))))
             if abs(error_ratio) <= tol
                 println("Converged after $i iterations.")
-                # store_ssc(result)
-                return rated_power
+                store_ssc(result, csp_type, facility_id, option)
+                return result
             end
 
             # Adjust rated power proportionally
@@ -276,11 +281,12 @@ function run_ssc_options(csp_type::String,facility_id::Int,option::String,peak_p
         end
 
         println("Did not converge after $max_iter iterations.")
-        return rated_power
+        return result
     end
     
 end
 
+#=
 csp_type = "trough"
 facility_id = 100
 option = "C"
@@ -288,6 +294,6 @@ peak_power = 150.0
 annual_demand = 100.0*8760
 println(string("Annual Energy Demand [Mwh]: ", string(round(Int,annual_demand))))
 available_area = 300.0
-rated_power = run_ssc_options(csp_type,facility_id,option,peak_power,annual_demand,available_area)
+rated_power = run_ssc_options(csp_type, facility_id, option, peak_power, annual_demand, available_area)
 print(rated_power)
-
+=#

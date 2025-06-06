@@ -17,7 +17,8 @@ using CSV, DataFrames, DelimitedFiles
 #columns to select from csv file for parcel data
 cols = [:MatchID, :naicsCode, :place_name, :parcel_latitude, :parcel_longitude, :latitude, :longitude, 
 :state, :airport_5km_int, :urban_areas_int, :DOD_airspace_int, :critical_habs_1_int, :critical_habs_2_int, 
-:wind_exclusion, :cejst_dac_int, :FLD_PFS, :WFR_PFS, :solarPV_ground_area, :wind_ground_area]
+:wind_exclusion, :cejst_dac_int, :FLD_PFS, :WFR_PFS, :solarPV_ground_area, :wind_ground_area,
+:earthquake_hazard, :desert_tortoise, :acec, :coastline_5mi, :critical_bird_areas]
 function read_csv_parcel_file(file_path::String)
     # Read the CSV into a DataFrame
     initial_df = CSV.read(file_path, DataFrame)
@@ -36,7 +37,7 @@ end
 # Folder paths
 #get load data from Load Profiles folder
 electric_load_folder_path = "./tests/Load Profiles/"
-ng_load_folder_path = "C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/NG Consumption/"
+#ng_load_folder_path = "C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/NG Consumption/"
 
 #sitelist csv
 sitelist_csv_path = "./tests/Sitelist/LC_facility_parcels_NREL_05_18_25_TEST_CSP.csv"
@@ -56,7 +57,14 @@ function run_csp(i::Int, option::String)
     analysis_runs = DataFrame()
     emissions = DataFrame()
 
+    #get MatchID in data DataFrame to start getting other data from loads 
+    match_id = data[!, :MatchID][i]
+    #println("The site's Match ID is: ", match_id)
+
     #get load data 
+    site_load_info = get_load_data2(match_id=match_id, folder_path_e=electric_load_folder_path, folder_path_ng="")
+    load_vector = site_load_info[1]
+    ng_annual_mmbtu = site_load_info[2]
 
     #use data 
     #conversion for latitude
@@ -79,27 +87,34 @@ function run_csp(i::Int, option::String)
         println("The land acres constraint is (acres): ", land_acres)
     end
 
+    #because this is a PTC, the minimum land we need is 2.1 acres for 1 MW system, if the land is less than that then we'll exit function
+    if land_acres < 2.1 || data[!, :earthquake_hazard][i] == true || data[!, :desert_tortoise][i] == true || data[!, :acec][i] == true || data[!, :coastline_5mi][i] == true || data[!, :wind_exclusion][i] == true || data[!, :DOD_airspace_int][i] == true 
+        @warn "Land area is less than 2.1 acres, exiting function."
+        return nothing
+    end
+
+    #find out if there is a weather file for this site, if there is, use it, if not, download the weather file and store it
+    #check if the weather file exists
+    weather_file_csv = joinpath(@__DIR__, "weatherfiles", "weatherfile_$(match_id)_wdir.csv")
+    if !isfile(weather_file_csv)
+        #if the file does not exist, download it
+        @info "Weather file for MatchID $(match_id) does not exist. Downloading..."
+        get_weatherdata(lat=latitude, lon=longitude, debug=true, api_dv="", facility_id=match_id)
+    else
+        @info "Weather file for MatchID $(match_id) already exists."
+    end
+
     #SAM takes in area in acres 
     #
 
-
-    #get MatchID in data DataFrame to start getting other data from loads 
-    match_id = data[!, :MatchID][i]
-    #println("The site's Match ID is: ", match_id)
-
-    #create the file name for this specific site + CSP type "_ptc" (the other versios are "_pt" and "_lfr")
-    file_name = string(match_id, "_ptc")
-    site_load_info = get_load_data(match_id=match_id, folder_path_e=electric_load_folder_path, folder_path_ng=ng_load_folder_path)
-    load_vector = site_load_info[1]
-    
-    #leave for later
-    ng_annual_mmbtu = site_load_info[2]
+    #create the RESULT file name for this specific site + CSP type "_ptc" (the other versios are "_pt" and "_lfr")
+    result_file_name = string("result_", match_id, "_ptc.csv")
 
     csp_type = "trough"
     facility_id = match_id #this is how the weather file is pulled, aka MatchID
     # option is already defined in the function
     peak_power = maximum(load_vector / 1000) # from the load profile
-    annual_demand = sum(load_vector / 1000) # from the load profile 100.0*8760
+    annual_demand = sum(load_vector / 1000) # from the load profile 
     println(string("Annual Energy Demand [Mwh]: ", string(round(Int,annual_demand))))
     available_area = land_acres # acres gotten above 
     #= run_ssc_options includes:
@@ -110,25 +125,67 @@ function run_csp(i::Int, option::String)
         annual_demand - got from load_vector, 
         available_area = land_acres
     =#
-    rated_power = run_ssc_options(csp_type, facility_id, option, peak_power, annual_demand, land_acres)
-    print(rated_power)
+    results_dict = run_ssc_options(csp_type, facility_id, option, peak_power, annual_demand, available_area)
+
+    # net electricity produced (total production - onsite consumption for other system loads)
+    net_electricity_produced = results_dict["Annual Energy Production [MWh]"] * 1000 # convert MWh to kWh
+
+    # Read the existing CSV into a DataFrame
+    df = CSV.read(result_file_name, DataFrame)
+
+    # Add new columns with values (the length of the vector must match the number of rows in df)
+    df[!, :MatchID] = [match_id]
+    df[!, NAICS] = [data[!, :naicsCode][i]]
+    df[!, :state] = [data[!, :state][i]]
+    df[!, :DAC] = [data[!, :cejst_dac_int][i]]
+    df[!, :input_Latitude] = [latitude]
+    df[!, :input_Longitude] = [longitude]
+    df[!, :input_roofsqft] = ["NA"]
+    df[!, :input_landacres] = [land_acres]
+    df[!, :input_annual_electric_load_kWh] = [sum(load_vector)]
+    df[!, :input_annual_ng_load_mmbtu] = [ng_annual_mmbtu]
+    df[!, :csp_type] = ["ptc"]
+    df[!, :option] = [option]
+    df[!, :cst_size_kW] = [results_dict["Rated Power [MW]"] * 1000] # convert MW to kW
+    df[!, :annual_kwh_energy_production] = [results_dict["Annual Energy Production [MWh]"] * 1000] # convert MWh to kWh
+    df[!, :cst_size_acres] = [results_dict["Total Area [acre]"]]
+    df[!, :solar_multiple] = [results_dict["Solar Multiple [-]"]]
+    df[!, :capacity_factor] = [results_dict["Capacity Factor [-]"]]
+    df[!, :csp_serving_load] # will be done later
+    df[!, :Grid_Electricity_Supplied_kWh_annual] #will be done later
+    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_site] #will be done later
+    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] #will be done later
+    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_site] #will be done later
+    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] #will be done later
+
+    #= Suppose you want the 4th column first, then the rest in their original order (except the 4th)
+    cols = names(df)
+    new_order = vcat(cols[4], cols[1:3], cols[5:end])
+    df = df[:, new_order] =#
+
+    # Save the updated DataFrame back to the same CSV file
+    CSV.write(result_file_name, df)
+    
 
 end
 
 ## Read the data
-scenarios = read_csv_parcel_file(parcel_file)
+scenarios = read_csv_parcel_file(sitelist_csv_path)
 match_id = scenarios[!, :MatchID]
-evaluated = readdir("./results/trough/")
+evaluatedB = readdir("./results/trough/option B/")
+evaluatedC = readdir("./results/trough/option C/")
 
 #get ids 
 task_id = ENV["SLURM_ARRAY_TASK_ID"]
 task_id_int = parse(Int, task_id)
 
 # Loop through the scenarios
-fname = string(match_id[task_id_int], ".csv")
+fname = string("result", match_id[task_id_int], "_ptc", ".csv")
 try
-    if !(fname in evaluated)
+    if !(fname in evaluatedB)
         @time run_csp(task_id_int, "B")
+    end
+    if !(fname in evaluatedC)
         @time run_csp(task_id_int, "C")
     end
 catch e

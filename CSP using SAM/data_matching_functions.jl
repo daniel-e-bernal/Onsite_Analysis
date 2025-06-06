@@ -28,7 +28,7 @@ function get_load_data(;
     end
     #the files are numbered, therefore, we'll set a counter 
     counter = 0
-    max_counter = 35
+    max_counter = 34
 
     while true
         #check counter 
@@ -97,10 +97,12 @@ function get_load_data2(;
     else
         match_id
     end
+
     #the files are numbered, therefore, we'll set a counter 
     counter = 0
-    max_counter = 35
+    max_counter = 34
 
+    #loop through all of th efiles until we find the matching match_id and simulationID to attain 8760 load profile
     while true
         #check counter 
         if counter == max_counter
@@ -110,8 +112,6 @@ function get_load_data2(;
         #we get the traits path first 
         file_path_e = joinpath(folder_path_e, "$traits_file$(string(counter)).csv")
         file_e = CSV.read(file_path_e, DataFrame)
-        file_path_ng = joinpath(folder_path_ng, "Manufacturing Parcel Data - Natural Gas Estimates.csv")
-        file_ng = CSV.read(file_path_ng, DataFrame)
         #electric_estimated_or_random = []
         #find the MatchID in the electric loads file 
         find_match_id_row = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_e)
@@ -126,27 +126,37 @@ function get_load_data2(;
             #append!(electric_estimated_or_random, "$estimated_or_real")
             println("Got the simu_id = ", simu_id)
         end
-        ng_load = [] 
-        #find the MatchID in the natural gas file
-        find_match_id_row_ng = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_ng)
-        if isempty(find_match_id_row_ng)
-            println("Did not find a MatchID for the natural gas consumption.")
-            append!(ng_load, 0)
-            #append!(ng_estimated_or_random, "NaN")
-        else #so if a match was found 
-            annual_ng_mmbtu = find_match_id_row_ng.Estimated_Annual_Natural_Gas_MMBtu[1]
-            #estimated_or_real_ng = find_match_id_row_ng.Natural_Gas_Estimated_E_or_Random_R[1]
-            append!(ng_load, annual_ng_mmbtu)
-            #append!(ng_estimated_or_random, "$estimated_or_real_ng")
-            println("The annual MMBtu consumption is  = ", annual_ng_mmbtu)
-        end
-
         #get the file path for the set file that contains the hourly loads 
         file_path_s = joinpath(folder_path_e, "$set_file$(string(counter)).csv")
         file_s = CSV.read(file_path_s, DataFrame)
         electric_hourly_load = []
         append!(electric_hourly_load, file_s[!, simu_id])
-        return electric_hourly_load,  ng_load
+
+        #create empty ng_load array
+        ng_load = [] 
+
+        #check if folder_path_ng is empty or does not exist
+        if folder_path_ng == "" || !isdir(folder_path_ng)
+            append!(ng_load, 0)
+        else
+            file_path_ng = joinpath(folder_path_ng, "Manufacturing Parcel Data - Natural Gas Estimates.csv")
+            file_ng = CSV.read(file_path_ng, DataFrame)
+
+            #find the MatchID in the natural gas file
+            find_match_id_row_ng = filter(row -> !ismissing(row.MatchID) && row.MatchID == match_id, file_ng)
+            if isempty(find_match_id_row_ng)
+                println("Did not find a MatchID for the natural gas consumption.")
+                append!(ng_load, 0)
+                #append!(ng_estimated_or_random, "NaN")
+            else #so if a match was found 
+                annual_ng_mmbtu = find_match_id_row_ng.Estimated_Annual_Natural_Gas_MMBtu[1]
+                #estimated_or_real_ng = find_match_id_row_ng.Natural_Gas_Estimated_E_or_Random_R[1]
+                append!(ng_load, annual_ng_mmbtu)
+                #append!(ng_estimated_or_random, "$estimated_or_real_ng")
+                println("The annual MMBtu consumption is  = ", annual_ng_mmbtu)
+            end
+        end
+        return electric_hourly_load, ng_load
     end
 end
 
