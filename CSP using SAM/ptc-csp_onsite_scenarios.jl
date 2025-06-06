@@ -12,7 +12,7 @@ The information below is the running variables for the parabolic troughts (PTC) 
     print(rated_power)
 """
 
-using CSV, DataFrames, DelimitedFiles
+using CSV, DataFrames, DelimitedFiles, HTTP, JSON, Dates, XLSX, FilePaths
 
 #columns to select from csv file for parcel data
 cols = [:MatchID, :naicsCode, :place_name, :parcel_latitude, :parcel_longitude, :latitude, :longitude, 
@@ -36,7 +36,8 @@ end
 
 # Folder paths
 #get load data from Load Profiles folder
-electric_load_folder_path = "./tests/Load Profiles/"
+electric_load_folder_path = "C:/Users/dbernal/Downloads/ITO Load Profiles/"
+#electric_load_folder_path = "./tests/Load Profiles/"
 #ng_load_folder_path = "C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/NG Consumption/"
 
 #sitelist csv
@@ -53,12 +54,9 @@ function run_csp(i::Int, option::String)
         error("Option must be one of A, B, or C")
     end
 
-    #df to store results
-    analysis_runs = DataFrame()
-    emissions = DataFrame()
-
     #get MatchID in data DataFrame to start getting other data from loads 
     match_id = data[!, :MatchID][i]
+    match_id = String(match_id)
     #println("The site's Match ID is: ", match_id)
 
     #get load data 
@@ -104,8 +102,6 @@ function run_csp(i::Int, option::String)
         @info "Weather file for MatchID $(match_id) already exists."
     end
 
-    #SAM takes in area in acres 
-    #
 
     #create the RESULT file name for this specific site + CSP type "_ptc" (the other versios are "_pt" and "_lfr")
     result_file_name = string("result_", match_id, "_ptc.csv")
@@ -127,8 +123,61 @@ function run_csp(i::Int, option::String)
     =#
     results_dict = run_ssc_options(csp_type, facility_id, option, peak_power, annual_demand, available_area)
 
-    # net electricity produced (total production - onsite consumption for other system loads)
-    net_electricity_produced = results_dict["Annual Energy Production [MWh]"] * 1000 # convert MWh to kWh
+    #= net electricity produced series
+    positive values are net production 
+    negative values are net consumption
+    =#
+    net_electricity_produced_series = results_dict["Electricity Produced [MW]"] * 1000 # convert MWh to kWh
+
+    #initialize empty arrays
+    export_series_kW = [] #8760 intervals
+    grid_supplied_kW = [] #8760 intervals
+    csp_serving_load_series = [] #8760 intervals
+
+    #= calculate the values for each timestep such that we know A) how much energy was produced at that timestep, B) how much energy was supplied by grid, and C) how much was exported from CST to grid.
+        When the net electricity produced is positive then we know the CST plant is producing more energy than consuming.
+            If Load - Production > 0, then no export 
+            If Load - Production < 0, then export = Production - Load or abs(Load - Production)
+        When the net electricity produced is negative then we know the CST plant is consuming more energy than producing.
+            Then, grid supplied = load + abs(Production) and no export
+    =#
+    for i in eachindex(net_electricity_produced_series)
+        if net_electricity_produced_series[i] >= 0
+            load_minus_production = load_vector[i] - net_electricity_produced_series[i]
+            if load_minus_production >= 0
+                push!(grid_supplied_kW, load_minus_production)
+                push!(csp_serving_load_series, net_electricity_produced_series[i])
+                push!(export_series_kW, 0)
+            else # the load minus production < 0, which means the CSP plant is producing more than the load 
+                push!(grid_supplied_kW, 0) #csp is producing more than load, therefore the grid does not supply any 
+                push!(csp_serving_load_series, load_vector[i]) #csp is serving the entire facility's load + its own load 
+                push!(export_series_kW, abs(load_minus_production)) #excess
+            end
+        else # net_electricity_produced_series[i] < 0
+            grid_s = load_vector[i] + abs(net_electricity_produced_series[i]) #the load that the facility needs to be met + load CSP plant needs 
+            push!(grid_supplied_kW, grid_s)
+            push!(csp_serving_load_series, 0) #csp is not serving the load at all 
+            push!(export_series_kW, 0) #since csp is not serving the load, then there is obviously no export 
+        end
+    end
+    "Sample below of what is occurring above"
+    # net_electricity_produced_series = [0, -10, -5, 10, 15, 20, 20, 15, 20, -2, -5, 0]
+    # load_vector =                     [5,   5, 10, 10, 15, 15, 10, 10,  5,  5,  0, 0]
+    # export =                          [0,   0,  0,  0,  0,  5, 10,  5, 15,  0,  0, 0]
+    # grid supplied =                   [5,  15, 15,  0,  0,  0,  0,  0,  0,  7,  5, 0]
+    # csp serving the load =            [0,   0,  0, 10, 15, 15, 10, 10,  5,  0,  0, 0]
+
+    "Emissions calculations below"
+
+    # Get AVERT emissions region    
+    if avert_emissions_region == ""
+        region_abbr, meters_to_region = avert_region_abbreviation(latitude, longitude)
+        avert_emissions_region = region_abbr_to_name(region_abbr)
+    else
+        region_abbr = region_name_to_abbr(avert_emissions_region)
+        meters_to_region = 0
+    end
+
 
     # Read the existing CSV into a DataFrame
     df = CSV.read(result_file_name, DataFrame)
@@ -151,12 +200,12 @@ function run_csp(i::Int, option::String)
     df[!, :cst_size_acres] = [results_dict["Total Area [acre]"]]
     df[!, :solar_multiple] = [results_dict["Solar Multiple [-]"]]
     df[!, :capacity_factor] = [results_dict["Capacity Factor [-]"]]
-    df[!, :csp_serving_load] # will be done later
-    df[!, :Grid_Electricity_Supplied_kWh_annual] #will be done later
-    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_site] #will be done later
-    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] #will be done later
-    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_site] #will be done later
-    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] #will be done later
+    df[!, :csp_serving_load] = [sum(csp_serving_load_series)] 
+    df[!, :Grid_Electricity_Supplied_kWh_annual] = [sum(grid_supplied_kW)] 
+    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_site] = 0 #will be done later
+    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] = 0 #will be done later
+    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_site] = 0 #will be done later
+    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] = 0 #will be done later
 
     #= Suppose you want the 4th column first, then the rest in their original order (except the 4th)
     cols = names(df)
@@ -165,7 +214,7 @@ function run_csp(i::Int, option::String)
 
     # Save the updated DataFrame back to the same CSV file
     CSV.write(result_file_name, df)
-    
+    println("The scenario number $i was completed.")
 
 end
 
@@ -176,20 +225,22 @@ evaluatedB = readdir("./results/trough/option B/")
 evaluatedC = readdir("./results/trough/option C/")
 
 #get ids 
-task_id = ENV["SLURM_ARRAY_TASK_ID"]
-task_id_int = parse(Int, task_id)
+#task_id = ENV["SLURM_ARRAY_TASK_ID"]
+#task_id_int = parse(Int, task_id)
 
-# Loop through the scenarios
-fname = string("result", match_id[task_id_int], "_ptc", ".csv")
-try
-    if !(fname in evaluatedB)
-        @time run_csp(task_id_int, "B")
+# Loop through the scenarios 
+for i in [1, 2, 3, 4, 5]
+    fname = string("result", match_id[i], "_ptc", ".csv") #change i to task_id_int
+    try
+        if !(fname in evaluatedB)
+            @time run_csp(i, "B") # change i to task_id_int
+        end
+        if !(fname in evaluatedC)
+            @time run_csp(i, "C") #change i to task_id_int
+        end
+    catch e
+        @info e
+        @warn "Error for " scenarios[!, 1][i]
+        sleep(3)
     end
-    if !(fname in evaluatedC)
-        @time run_csp(task_id_int, "C")
-    end
-catch e
-    @info e
-    @warn "Error for " scenarios[!, 1][i]
-    sleep(3)
 end
