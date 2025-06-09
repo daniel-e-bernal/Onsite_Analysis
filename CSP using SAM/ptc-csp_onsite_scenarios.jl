@@ -59,8 +59,8 @@ function run_csp(i::Int, option::String)
     match_id = String(match_id)
     #println("The site's Match ID is: ", match_id)
 
-    #get load data 
-    site_load_info = get_load_data2(match_id=match_id, folder_path_e=electric_load_folder_path, folder_path_ng="")
+    #get load data, use_test=true is set so that we are using the load profiles within the tests folder not from the entire load profile dataset
+    site_load_info = get_load_data2(match_id=match_id, folder_path_e=electric_load_folder_path, folder_path_ng="", use_test=true)
     load_vector = site_load_info[1]
     ng_annual_mmbtu = site_load_info[2]
 
@@ -229,7 +229,7 @@ evaluatedC = readdir("./results/trough/option C/")
 #task_id_int = parse(Int, task_id)
 
 # Loop through the scenarios 
-for i in [1, 2, 3, 4, 5]
+for i in [2, 3, 4, 5, 6]
     fname = string("result", match_id[i], "_ptc", ".csv") #change i to task_id_int
     try
         if !(fname in evaluatedB)

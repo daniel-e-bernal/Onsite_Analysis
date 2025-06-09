@@ -85,7 +85,8 @@ function get_load_data2(;
     folder_path_e::String, #the electric loads folder path
     folder_path_ng::String, #the ng loads folder path
     traits_file::String = "Load Facility Traits Set ",
-    set_file::String = "Load Profiles Set ")
+    set_file::String = "Load Profiles Set ",
+    use_test::Bool = true)
     
     #prepare to intake any type of String
     if match_id isa String31
@@ -96,6 +97,20 @@ function get_load_data2(;
         match_id = String(match_id)
     else
         match_id
+    end
+
+    if use_test == true
+        #find matching load profile using match_id in the "./tests/Load Profiles/" folder
+        load_elec_f = "./tests/Load Profiles/$(match_id)_electric.csv"
+        if isfile(load_elec_f)
+            #read the file and return the electric load profile
+            electric_hourly_load = CSV.read(load_elec_f, DataFrame)[:, 1]
+            ng_load = 0 #no natural gas load profile
+            return electric_hourly_load, ng_load
+        else
+            println("No matching load profile found in the test folder for match_id: $match_id")
+            return nothing, nothing
+        end
     end
 
     #the files are numbered, therefore, we'll set a counter 
