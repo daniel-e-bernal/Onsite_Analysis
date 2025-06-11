@@ -153,45 +153,47 @@ function run_ssc(csp_type::String, facility_id::String, rated_power::Float64)
         #println(test)
         if test != 1
             println("SAM Simulation Failed.")
+            results_summary = Dict()
         else
             println("SAM Simulation Successful.")
-        end
+            ### Retrieve results
+            outputs_dict = Dict(
+                "trough" => ["P_out_net","total_land_area"], # Units: [MWe, acre]
+                "fresnel" => ["P_out_net","total_land_area"], # Units: [MWe, acre]
+                "mst" => ["P_out_net","total_land_area"] # Units: [MWe, acre]
+            )
+            outputs = outputs_dict[model]
+            annual_energy = []
+            total_area = 0.0
+            for k in outputs
+                if k in ["P_out_net"]
+                    len = 0
+                    len_ref = Ref(len)
+                    c_response = @ccall hdl.ssc_data_get_array(data::Ptr{Cvoid}, k::Cstring, len_ref::Ptr{Cvoid})::Ptr{Float64}
+                    
+                    for i in 1:8760
+                        push!(annual_energy,unsafe_load(c_response,i))  # For array type outputs
+                    end
+                    println(string("Annual Electricity Production [MWhe]: ",round(Int,sum(annual_energy))))
 
-        ### Retrieve results
-        outputs_dict = Dict(
-            "trough" => ["P_out_net","total_land_area"], # Units: [MWe, acre]
-            "fresnel" => ["P_out_net","total_land_area"], # Units: [MWe, acre]
-            "mst" => ["P_out_net","total_land_area"] # Units: [MWe, acre]
-        )
-        outputs = outputs_dict[model]
-        annual_energy = []
-        total_area = 0.0
-        for k in outputs
-            if k in ["P_out_net"]
-                len = 0
-                len_ref = Ref(len)
-                c_response = @ccall hdl.ssc_data_get_array(data::Ptr{Cvoid}, k::Cstring, len_ref::Ptr{Cvoid})::Ptr{Float64}
-                
-                for i in 1:8760
-                    push!(annual_energy,unsafe_load(c_response,i))  # For array type outputs
+                elseif k in ["total_land_area"]
+                    val = convert(Cdouble, 0.0)
+                    ref = Ref(val)
+                    @ccall hdl.ssc_data_get_number(data::Ptr{Cvoid}, k::Cstring, ref::Ptr{Cdouble})::Cvoid
+                    total_area = Float64(ref[])
+                    println(string("Total Land Area [acre]: ",round(Int,total_area)))
                 end
-                println(string("Annual Electricity Production [MWhe]: ",round(Int,sum(annual_energy))))
-
-            elseif k in ["total_land_area"]
-                val = convert(Cdouble, 0.0)
-                ref = Ref(val)
-                @ccall hdl.ssc_data_get_number(data::Ptr{Cvoid}, k::Cstring, ref::Ptr{Cdouble})::Cvoid
-                total_area = Float64(ref[])
-                println(string("Total Land Area [acre]: ",round(Int,total_area)))
             end
+            ### ADD System size parameters that 
+            results_summary = Dict("Annual Electricity, Net [MWh]" => sum(annual_energy),
+                                "Electricity Produced [MW]" => annual_energy,
+                                "Total Area [acre]" => total_area,
+                                "Solar Multiple [-]" => sm,
+                                "Rated Power [MW]" => rated_power,
+                                "Capacity Factor [-]" => sum(annual_energy)/(8760*rated_power))
         end
-        ### ADD System size parameters that 
-        results_summary = Dict("Annual Electricity, Net [MWh]" => sum(annual_energy),
-                               "Electricity Produced [MW]" => annual_energy,
-                               "Total Area [acre]" => total_area,
-                               "Solar Multiple [-]" => sm,
-                               "Rated Power [MW]" => rated_power,
-                               "Capacity Factor [-]" => sum(annual_energy)/(8760*rated_power))
+
+        
         
         ### Free SSC
         @ccall hdl.ssc_module_free(ssc_module::Ptr{Cvoid})::Cvoid   
@@ -199,7 +201,7 @@ function run_ssc(csp_type::String, facility_id::String, rated_power::Float64)
 
     end
     
-    return results_summary 
+    return test, results_summary 
 end
 
 # models = ["trough"] #,"fresnel","mst"]
@@ -245,21 +247,25 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
         rated_power = peak_power
         println("Beginning Option B.")
         for i in 1:max_iter
-            result = run_ssc(csp_type, facility_id, rated_power)
-            annual_generation = result["Annual Electricity, Net [MWh]"]
-            #print(annual_generation)
-            error_ratio = (annual_generation - annual_demand) / annual_demand
-            println(string("Error ratio: ",string(round(error_ratio,digits=4))))
-            if abs(error_ratio) <= tol
-                println("Converged after $i iterations.")
-                store_ssc(result, csp_type, facility_id, option)
-                println("Final Rated Power: ", rated_power)
-                println("Successfully completed Option B.")
+            test, result = run_ssc(csp_type, facility_id, rated_power)
+            if test != 0 # SAM Simulation was successful
+                annual_generation = result["Annual Electricity, Net [MWh]"]
+                #print(annual_generation)
+                error_ratio = (annual_generation - annual_demand) / annual_demand
+                println(string("Error ratio: ",string(round(error_ratio,digits=4))))
+                if abs(error_ratio) <= tol
+                    println("Converged after $i iterations.")
+                    store_ssc(result, csp_type, facility_id, option)
+                    println("Final Rated Power: ", rated_power)
+                    println("Successfully completed Option B.")
+                    return result
+                end
+
+                # Adjust rated power proportionally
+                rated_power *= 1 / (1 + damping_factor*error_ratio)
+            else
                 return result
             end
-
-            # Adjust rated power proportionally
-            rated_power *= 1 / (1 + damping_factor*error_ratio)
         end
 
         println("Did not converge after $max_iter iterations.")
@@ -268,20 +274,24 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
         rated_power = peak_power
         println("Beginning Option C.")
         for i in 1:max_iter
-            result = run_ssc(csp_type, facility_id, rated_power)
-            total_area = result["Total Area [acre]"]
-            #print(annual_generation)
-            error_ratio = (total_area - available_area) / available_area
-            println(string("Error ratio: ",string(round(error_ratio,digits=4))))
-            if abs(error_ratio) <= tol
-                println("Converged after $i iterations.")
-                store_ssc(result, csp_type, facility_id, option)
-                println("Successfully completed Option C.")
+            test, result = run_ssc(csp_type, facility_id, rated_power)
+            if test != 0 # SAM simulation was successful
+                total_area = result["Total Area [acre]"]
+                #print(annual_generation)
+                error_ratio = (total_area - available_area) / available_area
+                println(string("Error ratio: ",string(round(error_ratio,digits=4))))
+                if abs(error_ratio) <= tol
+                    println("Converged after $i iterations.")
+                    store_ssc(result, csp_type, facility_id, option)
+                    println("Successfully completed Option C.")
+                    return result
+                
+                end
+                # Adjust rated power proportionally
+                rated_power *= 1 / (1 + damping_factor*error_ratio)
+            else
                 return result
             end
-
-            # Adjust rated power proportionally
-            rated_power *= 1 / (1 + damping_factor*error_ratio)
         end
 
         println("Did not converge after $max_iter iterations.")

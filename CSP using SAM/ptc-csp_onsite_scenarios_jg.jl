@@ -232,8 +232,8 @@ evaluatedC = readdir("./results/trough/option C/")
 #task_id_int = parse(Int, task_id)
 
 # Loop through the scenarios 
-#for i in [2, 3, 4, 5, 6]
-for i in [4]
+for i in [2, 3, 4, 5, 6]
+#for i in [4]
     fname = string("result", match_id[i], "_ptc", ".csv") #change i to task_id_int
     try
         if !(fname in evaluatedB)
