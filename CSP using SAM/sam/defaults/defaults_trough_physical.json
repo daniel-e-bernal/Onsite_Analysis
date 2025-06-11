@@ -19,7 +19,7 @@
     "T_loop_out" : 391,
     "T_startup" : 325.33999999999997,
     "T_shutdown" : 325.33999999999997,
-    "use_abs_or_rel_mdot_limit" : 0,
+    "use_abs_or_rel_mdot_limit" : 1,
     "m_dot_htfmin" : 1,
     "m_dot_htfmax" : 12,
     "f_htfmin" : 0.25,

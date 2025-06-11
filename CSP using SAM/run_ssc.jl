@@ -243,6 +243,7 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
     # damping_factor (float) : iteration term to prevent unstable oscillations
     if option in ["B"]
         rated_power = peak_power
+        println("Beginning Option B.")
         for i in 1:max_iter
             result = run_ssc(csp_type, facility_id, rated_power)
             annual_generation = result["Annual Electricity, Net [MWh]"]
@@ -253,6 +254,7 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
                 println("Converged after $i iterations.")
                 store_ssc(result, csp_type, facility_id, option)
                 println("Final Rated Power: ", rated_power)
+                println("Successfully completed Option B.")
                 return result
             end
 
@@ -264,6 +266,7 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
         return result
     elseif option in ["C"]
         rated_power = peak_power
+        println("Beginning Option C.")
         for i in 1:max_iter
             result = run_ssc(csp_type, facility_id, rated_power)
             total_area = result["Total Area [acre]"]
@@ -273,6 +276,7 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
             if abs(error_ratio) <= tol
                 println("Converged after $i iterations.")
                 store_ssc(result, csp_type, facility_id, option)
+                println("Successfully completed Option C.")
                 return result
             end
 

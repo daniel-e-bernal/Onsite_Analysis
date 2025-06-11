@@ -35,7 +35,7 @@
     "T_startup" : 400,
     "p_start" : 0.021000000000000001,
     "L_rnr_pb" : 50,
-    "use_abs_or_rel_mdot_limit" : 0,
+    "use_abs_or_rel_mdot_limit" : 1,
     "m_dot_htfmin" : 3.0158900000000002,
     "m_dot_htfmax" : 14.4763,
     "f_htfmin" : 0.25,
