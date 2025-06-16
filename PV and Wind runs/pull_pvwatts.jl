@@ -178,28 +178,19 @@ function tilt_pv(;
     return tilt
 end
 
-function power_density(;
-    array_type::Integer #(0: Ground Mount Fixed (Open Rack); 1: Rooftop, Fixed; 2: Ground Mount 1-Axis Tracking)
-    )
-    if array_type == 0 #Ground Mount Fixed, acres/kW
-        power_density = 0.0031
-        return power_density
-    elseif  array_type == 1 #rooftop fixed, kW/ft^2
-        power_density = 0.017
-        return power_density
-    else                #ground mount 1-axis tracking, acres/kW
-        power_density = 0.0042
-        return power_density
-    end
-end
-
 @info Pkg.status()
 
 data = readdlm(
     joinpath("..", "Input Resources/", "LC_facility_parcels_NREL_11_27.csv"),
     ','
 )
-# columns 24 and 25 are for lat/lng and also the MatchID to name the csv file
+
+# download PVWatts data using match_id and lat/long to save to csv file 
+function pvwatts_download(match_id::String, parcel_file::String, parcel_df::DataFrame)
+    #chec
+end
+
+# columns 24 and 25 are for lat/long and also the MatchID to name the csv file
 @info data[1, 2], data[1, 3], data[1, 46], data[1, 50]
 
 evaluated = readdir("C:/Users/dbernal/OneDrive - NREL/General - IEDO Onsite Energy/Data/PVWatts_/pvwatts_roof_csvs/")

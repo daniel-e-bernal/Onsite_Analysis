@@ -348,7 +348,8 @@ end
         ground_axis_exists = isfile(get_ground_axis_file)
     
         if !roof_exists
-            error("No production factor file found for match_id: $match_id in roof_prod_factor_folder")
+            error("No production factor file found for match_id: $match_id in roof_prod_factor_folder.")
+            @info "Downloading now...."
         end
         if !ground_fixed_exists && !ground_axis_exists
             error("No production factor file found for match_id: $match_id in ground_prod_fixed_factor_folder OR ground_prod_axis_factor_folder")
