@@ -2,13 +2,20 @@
 The functions below are used to calculate emissions for the CSP model.
 """
 #using ArchGDAL
-using ArchGDAL, HTTP, DelimitedFiles, DataFrames, FilePaths, CSV, XLSX
+
+using ArchGDAL
+using HTTP
+using DelimitedFiles
+using DataFrames
+using FilePaths
+using CSV
+using XLSX
 using Dates
 using JSON
 
 
 function cambium_profile(; scenario::String = "Mid-case", 
-                        location_type::String = "GEA Regions", 
+                        location_type::String = "GEA Regions 2023", 
                         latitude::Real, 
                         longitude::Real,
                         start_year::Int = 2025,
@@ -114,7 +121,11 @@ function avert_emissions_profiles(; avert_region_abbr::String="", latitude::Real
     )
     for ekey in ["CO2", "NOx", "SO2", "PM25"]
         # Columns 1 and 2 do not contain AVERT region information, so skip them.
-        avert_df = readdlm(joinpath(@__DIR__, "..", "..", "data", "emissions", "AVERT_Data", "AVERT_$(avert_data_year)_$(ekey)_lb_per_kwh.csv"), ',')[:, 3:end]
+        file_df = joinpath(@__DIR__, "..", "..", "data", "emissions", "AVERT_Data", "AVERT_$(avert_data_year)_$(ekey)_lb_per_kwh.csv")
+        if !(isfile(file_df))
+            file_df = joinpath(@__DIR__, "tests", "emissions", "AVERT_$(avert_data_year)_$(ekey)_lb_per_kwh.csv")
+        end
+        avert_df = readdlm(file_df, ',')[:, 3:end]
         # Find col index for region. Row 1 does not contain AVERT data so skip that.
         emissions_profile_unadjusted = round.(avert_df[2:end,findfirst(x -> x == avert_region_abbr, avert_df[1,:])], digits=6)
         # Adjust for day of week alignment with load
@@ -131,6 +142,9 @@ end
 function avert_region_abbreviation(latitude, longitude)
     
     file_path = joinpath(@__DIR__, "..", "..", "data", "emissions", "AVERT_Data", "avert_4326.shp")
+    if !(isfile(file_path))
+        file_path = joinpath(@__DIR__, "tests", "emissions", "avert_4326.shp")
+    end
 
     abbr = nothing
     meters_to_region = nothing
@@ -154,7 +168,12 @@ function avert_region_abbreviation(latitude, longitude)
         return abbr, meters_to_region
     end
 
-    shpfile = ArchGDAL.read(joinpath(@__DIR__, "..", "..", "data", "emissions", "AVERT_Data", "avert_102008.shp"))
+    another_file = joinpath(@__DIR__, "..", "..", "data", "emissions", "AVERT_Data", "avert_102008.shp")
+    if !(isfile(another_file))
+        another_file = joinpath(@__DIR__, "tests", "emissions", "avert_102008.shp")
+    end
+
+    shpfile = ArchGDAL.read(another_file)
     avert_102008 = ArchGDAL.getlayer(shpfile, 0)
 
     pt = ArchGDAL.createpoint(latitude, longitude)
@@ -234,4 +253,32 @@ function region_name_to_abbr(region_name)
         "Hawaii (Oahu)" => "HIOA"
     )
     return get(lookup, region_name, "")
+end
+
+""" Emissions calculations flow """
+
+#calculate emissions
+function emissions_calc(latitude::Real, longitude::Real, avert_emissions_region::String="")
+    #attempt to get cambium profile
+    cambium_emissions = cambium_profile(
+                                        latitude = latitude, 
+                                        longitude = longitude)
+    if haskey(cambium_emissions, "error")
+        # Get AVERT emissions region    
+        if avert_emissions_region == ""
+            region_abbr, meters_to_region = avert_region_abbreviation(latitude, longitude)
+            avert_emissions_region = region_abbr_to_name(region_abbr)
+        else
+            region_abbr = region_name_to_abbr(avert_emissions_region)
+            meters_to_region = 0
+        end
+        #attempt to get avert profile if cambium fails
+        emissisons_avert = avert_emissions_profiles(
+                                latitude = latitude,
+                                longitude = longitude)
+        
+        return emissisons_avert
+    else
+        return cambium_emissions
+    end
 end

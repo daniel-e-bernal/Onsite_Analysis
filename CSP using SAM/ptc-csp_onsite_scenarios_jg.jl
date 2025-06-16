@@ -89,8 +89,8 @@ function run_csp(i::Int, option::String)
     end
 
     #because this is a PTC, the minimum land we need is 2.1 acres for 1 MW system, if the land is less than that then we'll exit function
-    if land_acres < 2.1 || data[!, :earthquake_hazard][i] == true || data[!, :desert_tortoise][i] == true || data[!, :acec][i] == true || data[!, :coastline_5mi][i] == true || data[!, :wind_exclusion][i] == true || data[!, :DOD_airspace_int][i] == true 
-        @warn "Land area is less than 2.1 acres, exiting function."
+    if land_acres < 4.50 || data[!, :earthquake_hazard][i] == true || data[!, :desert_tortoise][i] == true || data[!, :acec][i] == true || data[!, :coastline_5mi][i] == true || data[!, :wind_exclusion][i] == true || data[!, :DOD_airspace_int][i] == true 
+        @warn "Land area is less than 5 acres, exiting function."
         return nothing
     end
 
@@ -106,8 +106,9 @@ function run_csp(i::Int, option::String)
     end
 
 
-    #create the RESULT file name for this specific site + CSP type "_ptc" (the other versios are "_pt" and "_lfr")
-    result_file_name = string("result_", match_id, "_ptc.csv")
+    #create the RESULT file name for this specific site + CSP type "_trough" (the other versios are "_mst" and "_fresnel")
+    f_name = string("result_", match_id, "_trough.csv")
+    result_file_name = joinpath("./results/trough/option $option/$f_name")
 
     csp_type = "trough"
     facility_id = match_id #this is how the weather file is pulled, aka MatchID
@@ -171,23 +172,33 @@ function run_csp(i::Int, option::String)
     # csp serving the load =            [0,   0,  0, 10, 15, 15, 10, 10,  5,  0,  0, 0]
 
     "Emissions calculations below"
-
-    # Get AVERT emissions region    
-    if avert_emissions_region == ""
-        region_abbr, meters_to_region = avert_region_abbreviation(latitude, longitude)
-        avert_emissions_region = region_abbr_to_name(region_abbr)
+    #first get emissions series for the location 
+    emissions_dict = emissions_calc(latitude, longitude)
+    if "emissions_factor_series_lb_CO2_per_kwh" in keys(emissions_dict)
+        emissions_series = emissions_dict["emissions_factor_series_lb_CO2_per_kwh"]
     else
-        region_abbr = region_name_to_abbr(avert_emissions_region)
-        meters_to_region = 0
+        emissions_series = emissions_dict["data_series"]
     end
 
+    #BAU emissions 
+    bau_emissions_series = load_vector .* emissions_series #lbs CO2e per hour
+    bau_total_annual_emissions = sum(bau_emissions_series) #lbs CO2e per year
 
-    # Read the existing CSV into a DataFrame
-    df = CSV.read(result_file_name, DataFrame)
+    #now get future emissions using the net_electricity_produced_series
+    net_load = net_electricity_produced_series * (-1)
+    future_emissions_series = net_load .* emissions_series #lbs CO2e per hour
+    future_total_annual_emissions = sum(future_emissions_series) #lbs CO2e per year
 
-    # Add new columns with values (the length of the vector must match the number of rows in df)
+    #emissions for ng = 117.03 lbs CO2e per MMBtu
+    #ng_file_path = "./tests/NG Emissions/Manufacturing Parcel Data - Natural Gas Estimates.csv"
+    ng_emissions = ng_annual_mmbtu * 117.03 #lbs CO2e per year
+
+    # Create a DataFrame to store results for this scenario
+    df = DataFrame()
+
+    # Add new columns with values (each as a single-element vector)
     df[!, :MatchID] = [match_id]
-    df[!, NAICS] = [data[!, :naicsCode][i]]
+    df[!, :NAICS] = [data[!, :naicsCode][i]]
     df[!, :state] = [data[!, :state][i]]
     df[!, :DAC] = [data[!, :cejst_dac_int][i]]
     df[!, :input_Latitude] = [latitude]
@@ -199,23 +210,18 @@ function run_csp(i::Int, option::String)
     df[!, :csp_type] = ["ptc"]
     df[!, :option] = [option]
     df[!, :cst_size_kW] = [results_dict["Rated Power [MW]"] * 1000] # convert MW to kW
-    df[!, :annual_kwh_energy_production] = [results_dict["Annual Energy Production [MWh]"] * 1000] # convert MWh to kWh
+    df[!, :annual_kwh_energy_production] = [results_dict["Annual Electricity, Net [MWh]"] * 1000] # convert MWh to kWh
     df[!, :cst_size_acres] = [results_dict["Total Area [acre]"]]
     df[!, :solar_multiple] = [results_dict["Solar Multiple [-]"]]
     df[!, :capacity_factor] = [results_dict["Capacity Factor [-]"]]
     df[!, :csp_serving_load] = [sum(csp_serving_load_series)] 
     df[!, :Grid_Electricity_Supplied_kWh_annual] = [sum(grid_supplied_kW)] 
-    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_site] = 0 #will be done later
-    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] = 0 #will be done later
-    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_site] = 0 #will be done later
-    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] = 0 #will be done later
+    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_site] = [bau_total_annual_emissions + ng_emissions]
+    df[!, :BAU_Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] = [bau_total_annual_emissions]
+    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_site] = [future_total_annual_emissions + ng_emissions]
+    df[!, :Total_Annual_Emissions_lbs_CO2e_lrmer_elec_only] = [future_total_annual_emissions]
 
-    #= Suppose you want the 4th column first, then the rest in their original order (except the 4th)
-    cols = names(df)
-    new_order = vcat(cols[4], cols[1:3], cols[5:end])
-    df = df[:, new_order] =#
-
-    # Save the updated DataFrame back to the same CSV file
+    # Save the DataFrame to CSV
     CSV.write(result_file_name, df)
     println("The scenario number $i was completed.")
 
@@ -232,19 +238,36 @@ evaluatedC = readdir("./results/trough/option C/")
 #task_id_int = parse(Int, task_id)
 
 # Loop through the scenarios 
-for i in [2, 3, 4, 5, 6]
+for i in [1, 2, 3, 4, 5, 6]
 #for i in [4]
-    fname = string("result", match_id[i], "_ptc", ".csv") #change i to task_id_int
+    fname = string("result_", match_id[i], "_trough", ".csv") #change i to task_id_int
+    #fnameB = string("result_", match_id[i], "_mst", ".csv") #change i to task_id_int
+    #fname3 = string("result_", match_id[i], "_fresnel", ".csv") #change i to task_id_int
     try
-        if !(fname in evaluatedB)
+        if !(fname in evaluatedB) 
             @time run_csp(i, "B") # change i to task_id_int
         end
+    catch e
+        @info e
+        @warn "Error encountered for MatchID $(match_id[i]) at scenario index $i: $(e)"
+        # Adding a delay to prevent rapid retries or excessive logging during error handling.
+        sleep(3)
+    end
+end
+"""
+for i in [1, 2, 3, 4, 5, 6]
+#for i in [4]
+    fname = string("result_", match_id[i], "_trough", ".csv") #change i to task_id_int
+    #fnameB = string("result_", match_id[i], "_mst", ".csv") #change i to task_id_int
+    #fname3 = string("result_", match_id[i], "_fresnel", ".csv") #change i to task_id_int
+    try
         if !(fname in evaluatedC)
             @time run_csp(i, "C") #change i to task_id_int
         end
     catch e
         @info e
-        @warn "Error for " scenarios[!, 1][i]
+        @warn "Error encountered for MatchID $(match_id[i]) at scenario index $i: $(e)"
+        # Adding a delay to prevent rapid retries or excessive logging during error handling.
         sleep(3)
     end
-end
+end"""

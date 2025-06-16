@@ -339,12 +339,6 @@ function create_load_profile_csv(;
     output_folder::String = "./tests/Load Profiles/",
     override_existing_file::Bool = true) #output folder for the csv file
 
-    if !override_existing_file
-        println("Not overriding existing file")
-        return
-    end
-    println("Overriding existing file")
-
     #prepare to intake any type of String
     if match_id isa String31
         match_id = String(match_id)  # Convert String31 to String
@@ -354,6 +348,18 @@ function create_load_profile_csv(;
         match_id = String(match_id)
     else
         match_id
+    end
+
+    file_name = string(match_id, "_electric.csv")
+    file_path = joinpath(output_folder, file_name)
+
+    if isfile(file_path) && !override_existing_file
+        println("Not overriding existing file for $match_id")
+        return
+    elseif !(isfile(file_path))
+        println("Creating file for $match_id")
+    elseif isfile(file_path) && override_existing_file
+        println("Overriding existing file for $match_id")
     end
     
     #the files are numbered, therefore, we'll set a counter     
@@ -396,14 +402,14 @@ function create_load_profile_csv(;
         #electric_hourly_load = []
         #append!(electric_hourly_load, file_s[!, simu_id])
         df[!, :Load] = file_s[!, simu_id]
-        save_to_csv(df, output_folder, match_id)
+        save_load_to_csv(df, output_folder, match_id)
         println("The load profile for $match_id has been created in the folder $output_folder")
         break #exit loop
     end
 end
     
 #save to CSV file function
-function save_to_csv(data::DataFrame, file_path::String, name::String)
+function save_load_to_csv(data::DataFrame, file_path::String, name::String)
     #create file path
     file = joinpath(file_path, "$(name)_electric.csv")
 
