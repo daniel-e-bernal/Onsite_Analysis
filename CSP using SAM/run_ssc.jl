@@ -283,7 +283,8 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
                         rated_power *= 1 / (1 + damping_factor*error_ratio)
                     end 
                 end
-                """
+                #faulty logic below, will delete :TODO 
+                """ 
                 if abs(error_ratio2) <= tol && annual_generation <= annual_demand #land area is met and we're not overgenerating
                     println("Final Rated Power: ", rated_power)
                     println("Final Total Land Area [acre]: ", total_area)
@@ -361,15 +362,28 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
                 #print(annual_generation)
                 error_ratio = (total_area - available_area) / available_area
                 println(string("Error ratio: ",string(round(error_ratio,digits=4))))
-                if abs(error_ratio) <= tol
+                if abs(error_ratio) <= tol  && total_area <= available_area
                     println("Converged after $i iterations.")
+                    println("Final Rated Power: ", rated_power)
+                    println("Final Total Land Area [acre]: ", total_area)
                     #store_ssc(result, csp_type, facility_id, option)
                     println("Successfully completed Option C.")
                     return result
-                
+                elseif error_ratio > 0 #positive, need to decrease rated power of CSP because we need more land than currently have for this rated power 
+                    # Adjust rated power proportionally
+                    rated_power *= 1 / (1 + damping_factor*error_ratio)
+                elseif error_ratio < 0 #negative, can fit more so we must increase rated power 
+                    if i > 6 #already on the seventh iteration 
+                        println("Converged after $i iterations.")
+                        println("Final Rated Power: ", rated_power)
+                        println("Final Total Land Area [acre]: ", total_area)
+                        #store_ssc(result, csp_type, facility_id, option)
+                        println("Successfully completed Option C.")
+                        return result
+                    else 
+                        rated_power *= 1 / (1 + damping_factor*error_ratio)
+                    end 
                 end
-                # Adjust rated power proportionally
-                rated_power *= 1 / (1 + damping_factor*error_ratio)
             else
                 return result
             end
