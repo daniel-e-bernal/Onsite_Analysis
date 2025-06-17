@@ -34,6 +34,6 @@ def combine_csv_files(directory, output_file):
 
 if __name__ == "__main__":
     # Example usage
-    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/CSP using SAM/results/trough/option B/'  # Replace with your directory path
-    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/CSP using SAM/tests/results/CSP_trough_optionB(initial_results2).csv'  # Replace with your desired output file name
+    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/CSP using SAM/results/trough/option C/'  # Replace with your directory path
+    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/CSP using SAM/tests/results/CSP_trough_optionC(initial_results).csv'  # Replace with your desired output file name
     combine_csv_files(directory, output_file)

@@ -246,8 +246,8 @@ for i in (1:end_run)
     #fnameB = string("result_", match_id[i], "_mst", ".csv") #change i to task_id_int
     #fname3 = string("result_", match_id[i], "_fresnel", ".csv") #change i to task_id_int
     try
-        if !(fname in evaluatedB) 
-            @time run_csp(i, "B") # change i to task_id_int
+        if !(fname in evaluatedC) 
+            @time run_csp(i, "C") # change i to task_id_int
         end
     catch e
         @info e
