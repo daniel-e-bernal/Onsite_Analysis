@@ -89,8 +89,8 @@ function run_csp(i::Int, option::String)
     end
 
     #because this is a PTC, the minimum land we need is 2.1 acres for 1 MW system, if the land is less than that then we'll exit function
-    if land_acres < 4.50 || data[!, :earthquake_hazard][i] == true || data[!, :desert_tortoise][i] == true || data[!, :acec][i] == true || data[!, :coastline_5mi][i] == true || data[!, :wind_exclusion][i] == true || data[!, :DOD_airspace_int][i] == true 
-        @warn "Land area is less than 5 acres, exiting function."
+    if land_acres < 4.537 || data[!, :earthquake_hazard][i] == true || data[!, :desert_tortoise][i] == true || data[!, :acec][i] == true || data[!, :coastline_5mi][i] == true || data[!, :wind_exclusion][i] == true || data[!, :DOD_airspace_int][i] == true 
+        @warn "Land area is less than 4.5 acres, exiting function."
         return nothing
     end
 
@@ -185,8 +185,7 @@ function run_csp(i::Int, option::String)
     bau_total_annual_emissions = sum(bau_emissions_series) #lbs CO2e per year
 
     #now get future emissions using the net_electricity_produced_series
-    net_load = net_electricity_produced_series * (-1)
-    future_emissions_series = net_load .* emissions_series #lbs CO2e per hour
+    future_emissions_series = grid_supplied_kW .* emissions_series #lbs CO2e per hour
     future_total_annual_emissions = sum(future_emissions_series) #lbs CO2e per year
 
     #emissions for ng = 117.03 lbs CO2e per MMBtu
@@ -209,7 +208,9 @@ function run_csp(i::Int, option::String)
     df[!, :input_annual_ng_load_mmbtu] = [ng_annual_mmbtu]
     df[!, :csp_type] = ["ptc"]
     df[!, :option] = [option]
-    df[!, :cst_size_kW] = [results_dict["Rated Power [MW]"] * 1000] # convert MW to kW
+    df[!, :cst_size_kWe] = [results_dict["Rated Power [MW]"] * 1000] # convert MW to kW
+    df[!, :cst_solar_kWth] = [results_dict["Rated Power [MW]"] * 1000 * results_dict["Solar Multiple [-]"]]
+    df[!, :cst_tes_hrs] = [12]
     df[!, :annual_kwh_energy_production] = [results_dict["Annual Electricity, Net [MWh]"] * 1000] # convert MWh to kWh
     df[!, :cst_size_acres] = [results_dict["Total Area [acre]"]]
     df[!, :solar_multiple] = [results_dict["Solar Multiple [-]"]]
@@ -230,6 +231,7 @@ end
 ## Read the data
 scenarios = read_csv_parcel_file(sitelist_csv_path)
 match_id = scenarios[!, :MatchID]
+end_run = length(match_id)
 evaluatedB = readdir("./results/trough/option B/")
 evaluatedC = readdir("./results/trough/option C/")
 
@@ -238,7 +240,7 @@ evaluatedC = readdir("./results/trough/option C/")
 #task_id_int = parse(Int, task_id)
 
 # Loop through the scenarios 
-for i in [1, 2, 3, 4, 5, 6]
+for i in (1:end_run)
 #for i in [4]
     fname = string("result_", match_id[i], "_trough", ".csv") #change i to task_id_int
     #fnameB = string("result_", match_id[i], "_mst", ".csv") #change i to task_id_int

@@ -232,7 +232,7 @@ function store_ssc(result::Dict, csp_type::String, facility_id::String, option::
 end
 
 
-function run_ssc_options(csp_type::String, facility_id::String, option::String, peak_power::Float64, annual_demand::Float64, available_area::Float64; tol=0.01, max_iter=100, damping_factor=0.75)
+function run_ssc_options(csp_type::String, facility_id::String, option::String, peak_power::Float64, annual_demand::Float64, available_area::Float64; tol=0.05, max_iter=100, damping_factor=0.75)
     ### Function input definitions
     # csp_type (String) : type of csp technology
     # facility_id (Int) : Integer assigned to that facility, will be used for referencing weather files, saving results, etc.
@@ -256,7 +256,34 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
                 error_ratio2 = (total_area - available_area) / available_area
                 println(string("Error ratio for generation to demand ratio: ",string(round(error_ratio,digits=4))))
                 println(string("Error ratio for area: ",string(round(error_ratio2,digits=4))))
-
+                if abs(error_ratio2) <= tol && (abs(error_ratio) <= tol || annual_generation <= annual_demand)
+                    println("Final Rated Power: ", rated_power)
+                    println("Final Total Land Area [acre]: ", total_area)
+                    println("Successfully completed Option B.")
+                    #store_ssc(result, csp_type, facility_id, option)
+                    return result
+                elseif abs(error_ratio) <= tol && total_area <= available_area
+                    println("Final Rated Power: ", rated_power)
+                    println("Final Total Land Area [acre]: ", total_area)
+                    println("Successfully completed Option B.")
+                    #store_ssc(result, csp_type, facility_id, option)
+                    return result
+                elseif error_ratio2 > 0 #this means that total area > area avail.
+                    rated_power *= 1 / (1 + damping_factor*error_ratio2)
+                elseif error_ratio2 < 0 #this means that total area < area avail.
+                    if i > 4 && error_ratio < 0 #we're already at our fifth iteration or greater 
+                        println("Final Rated Power: ", rated_power)
+                        println("Final Total Land Area [acre]: ", total_area)
+                        println("Successfully completed Option B.")
+                        #store_ssc(result, csp_type, facility_id, option)
+                        return result
+                    elseif error_ratio < 0 #then we need more generation 
+                        rated_power *= 1 / (1 + damping_factor*error_ratio2)
+                    elseif error_ratio > 0 #then we have TOO MUCH generation 
+                        rated_power *= 1 / (1 + damping_factor*error_ratio)
+                    end 
+                end
+                """
                 if abs(error_ratio2) <= tol && annual_generation <= annual_demand #land area is met and we're not overgenerating
                     println("Final Rated Power: ", rated_power)
                     println("Final Total Land Area [acre]: ", total_area)
@@ -269,25 +296,41 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
                     println("Successfully completed Option B.")
                     #store_ssc(result, csp_type, facility_id, option)
                     return result
-                elseif error_ratio2 > 0 || total_area == 5 #need more land or already at 5 acres
-                    if error_ratio < 0 #need more generation but no more land to provide, output immediately
+                elseif error_ratio2 > 0 #need more land 
+                    if error_ratio < 0 && total_area <= available_area #need more generation but no more land to provide, output immediately
                         println("Final Rated Power: ", rated_power)
                         println("Final Total Land Area [acre]: ", total_area)
                         println("Successfully completed Option B.")
                         #store_ssc(result, csp_type, facility_id, option)
                         return result
-                    elseif error_ratio > 0 #somehow overproduced while hitting almost max land, therefore, adjust rated power for smaller system 
+                    elseif error_ratio > 0 && total_area <= available_area #somehow overproduced while hitting almost max land, therefore, adjust rated power for smaller system 
                         println("At or close to limit on land but overproduced")
                         rated_power *= 1 / (1 + damping_factor*error_ratio)
+                    elseif total_area > available_area # need more land and currently too high 
+                        if i > 7
+                            println("Final Rated Power: ", rated_power)
+                            println("Final Total Land Area [acre]: ", total_area)
+                            println("Successfully completed Option B.")
+                            #store_ssc(result, csp_type, facility_id, option)
+                            return result
+                        end
+                        println("Overproducing and don't have enough land")
+                        rated_power *= 1 / (1 + damping_factor*error_ratio2)
                     end
                 elseif error_ratio2 < 0 #have enough land
-                    if available_area == 5 #have enough land, overproduced, but already as low as we can go in acreage, output immediately
+                    if error_ratio2 >= -0.30 #have enough land, overproduced, but already as low as we can go in acreage, output immediately
                         println("Final Rated Power: ", rated_power)
                         println("Final Total Land Area [acre]: ", total_area)
                         println("Successfully completed Option B.")
                         #store_ssc(result, csp_type, facility_id, option)
                         return result
-                    elseif error_ratio > 0 && available_area > 5 #overproduced, iterate to lower rated power 
+                    elseif total_area < available_area && i > 7 
+                        println("Final Rated Power: ", rated_power)
+                        println("Final Total Land Area [acre]: ", total_area)
+                        println("Successfully completed Option B.")
+                        #store_ssc(result, csp_type, facility_id, option)
+                        return result
+                    elseif error_ratio > 0 #overproduced, iterate to lower rated power 
                         # Adjust rated power proportionally
                         println("Have enough land but overproduced. Decrease rated power.")
                         rated_power *= 1 / (1 + damping_factor*error_ratio)
@@ -299,7 +342,7 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
                 end
                 rated_power = abs(rated_power)
                 # Adjust rated power proportionally
-                #rated_power *= 1 / (1 + damping_factor*error_ratio2)
+                #rated_power *= 1 / (1 + damping_factor*error_ratio2)"""
             else
                 #store_ssc(result, csp_type, facility_id, option)
                 return result
