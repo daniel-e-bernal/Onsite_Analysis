@@ -34,6 +34,18 @@ def combine_csv_files(directory, output_file):
 
 if __name__ == "__main__":
     # Example usage
-    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/Wind/results_turbine_0/'  # Replace with your directory path
-    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/results/Wind/test_newlogic_2.csv'  # Replace with your desired output file name
+    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/+1/results_turbine_0/'  # Replace with your directory path
+    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/wind_+1_turbine_0.csv'  # Replace with your desired output file name
+    combine_csv_files(directory, output_file)
+    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/+1/results_turbine_1/'  # Replace with your directory path
+    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/wind_+1_turbine_1.csv'  # Replace with your desired output file name
+    combine_csv_files(directory, output_file)
+    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/+1/results_turbine_2/'  # Replace with your directory path
+    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/wind_+1_turbine_2.csv'  # Replace with your desired output file name
+    combine_csv_files(directory, output_file)
+    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/+1/results_turbine_3/'  # Replace with your directory path
+    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/wind_+1_turbine_3.csv'  # Replace with your desired output file name
+    combine_csv_files(directory, output_file)
+    directory = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/+1/results_turbine_4/'  # Replace with your directory path
+    output_file = 'C:/Users/dbernal/Documents/GitHub/Onsite_Analysis/PV and Wind runs/results/Wind/A/wind_+1_turbine_4.csv'  # Replace with your desired output file name
     combine_csv_files(directory, output_file)

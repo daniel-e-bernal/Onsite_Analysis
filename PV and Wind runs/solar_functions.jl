@@ -11,12 +11,16 @@ using Statistics
         that can fit on the land acres + roof space.
     Option C: Size the PV system to max out the roof + land space available.
     =#
-function pv_size_option(
-    baseload::Real = 0.0, #kW
-    load_kwh::Real = 0.0, #kWh
-    ; sizing_option::String, # "A", "B", or "C"
-    land_acres::Real = 0.0, #acres
-    roof_space_ft2::Real = 0.0 #ft^2
+function pv_size_option(;
+    sizing_option::String, # "A", "B", or "C"
+    roof_prod_series::Vector, #production factor series for fixed roof-mounted PV system
+    ground_fixed_prod_series::Vector, #production factor series for fixed ground-mounted PV system
+    ground_axis_prod_series::Vector, #production factor series for ground-mounted PV system with one-axis tracking
+    baseload::Real, #kW
+    load_kw::Vector, #series of kw
+    land_avail::Real, #land acres available
+    roof_avail::Real, #roof space available in ft2
+    data_dict::Dict{String, Any} #dictionary with data for the site
 )
     #check if the sizing option that was entered is valid 
     if !(sizing_option in ["A", "B", "C"])
@@ -24,19 +28,134 @@ function pv_size_option(
     end
 
     #check if the baseload and load_kwh are non-negative
-    if baseload < 0 || load_kwh < 0 || land_acres < 0 || roof_space_ft2 < 0
-        error("Baseload, load, land acres, and roof space must be non-negative.")
+    if baseload < 0 || land_avail < 0 || roof_avail < 0
+        error("Baseload, land acres, and roof space must be non-negative.")
     end
 
+    # setting up local variables
+    roof_fixed_prod_factor_series = roof_prod_series
+    ground_fixed_prod_factor_series = ground_fixed_prod_series
+    ground_axis_prod_factor_series = ground_axis_prod_series
+    load_vector = load_kw
+    land_acres = land_avail
+    roof_space = roof_avail
+    one_axis_deployment = false
+    input_data_site = data_dict
 
-    if sizing_option == "A" #size to baseload
-        return min(baseload, (land_acres * 43560 * power_density(0) + roof_space_ft2 * power_density(1)))
-    elseif sizing_option == "B" #size to load
-        return min(load, (land_acres * 43560 * power_density(0) + roof_space_ft2 * power_density(1)))
-    elseif sizing_option == "C" #size to max out space available
-        return (land_acres * 43560 * power_density(0) + roof_space_ft2 * power_density(1))
-    else
-        error("Invalid sizing option. Must be 'A', 'B', or 'C'.")
+    #calculating capacity factors 
+    PV_roof_capacity_factor = sum(roof_fixed_prod_factor_series) / 8760 #actual capacity factor
+    PV_fixed_ground_cap_factor = sum(ground_fixed_prod_factor_series) / 8760 #actual capacity factor for fixed rack ground PV
+    #if axis prod factor series is 0 then cap factor will be 0, otherwise, calculate actual capacity factor
+    PV_axis_ground_cap_factor = ground_axis_prod_factor_series == 0 ? 0 : sum(ground_axis_prod_factor_series) / 8760
+    
+    #calculate max roof PV size that would be necessary to satisfy site's load
+    PV_roof_max_size_based_on_load = sum(load_vector) / (PV_roof_capacity_factor * 8760)
+    #calcualte max roof PV size possible based on roof space
+    PV_roof_max_size_based_n_space = roof_space * (0.017) #power density is kw per sqft 
+
+    #calculate max ground PV size that would be necessary to satisfy site's load
+    PV_fixed_ground_max_size_based_on_load = sum(load_vector) / (PV_fixed_ground_cap_factor * 8760)
+    PV_axis_ground_max_size_based_on_load = PV_axis_ground_cap_factor == 0 ? 0 : (sum(load_vector) / (PV_axis_ground_cap_factor * 8760))
+
+    #calculate max ground PV sizes possible based on ground space
+    PV_fixed_ground_max_size_based_on_space = land_acres * (1/0.0031) #power density is acres per kW 
+    PV_axis_ground_max_size_based_on_space = land_acres * (1/0.0042) #power density is acres per kW
+    PV_ground_max_size_based_on_space = PV_fixed_ground_max_size_based_on_space
+
+    #If option = A - a set baseload (kW)
+    if sizing_option == "A"
+        #check if the baseload is less than or equal to the max roof size based on space 
+        if baseload <= PV_roof_max_size_based_n_space
+            println("Baseload $baseload (kW) for $match_id is less than or equal to PV roof max size based on space $PV_roof_max_size_based_n_space.")
+            input_data_site["PV"][2]["min_kw"] = baseload * 0.999 #set the minimum kW for the roof PV
+            input_data_site["PV"][2]["max_kw"] = baseload #set the maximum kW for the roof PV
+            input_data_site["PV"][1]["max_kw"] = 0 #set the maximum kW for the ground PV to 0 
+            return baseload, 0, one_axis_deployment, input_data_site
+        elseif baseload > PV_roof_max_size_based_n_space
+            println("Baseload $baseload (kW) for $match_id is greater than PV roof max size based on space $PV_roof_max_size_based_n_space.")
+            input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.999 #set the minimum kW for the roof PV
+            input_data_site["PV"][2]["max_kw"] = PV_roof_max_size_based_n_space #set the maximum kW for the roof PV
+            remaining_kw = baseload - PV_roof_max_size_based_n_space # to determine remaining kw 
+            if remaining_kw < 1000 #if less than than 1 MW then stick to fixed ground mount 
+                ground_PV_size = PV_fixed_ground_max_size_based_on_space < remaining_kw ? PV_fixed_ground_max_size_based_on_space : remaining_kw
+                input_data_site["PV"][1]["min_kw"] = ground_PV_size * 0.999 #set the minimum kW for the ground PV
+                input_data_site["PV"][1]["max_kw"] = ground_PV_size #set the maximum kW for the ground PV
+            elseif remaining_kw >= 1000 && PV_axis_ground_max_size_based_on_space >= 1000 #if at or greater than 1 MW AND enough space for axis (>= 4.2 acres) then go to axis ground mount
+                println("Switching to ground 1-axis PV for $match_id")
+                ground_PV_size = PV_axis_ground_max_size_based_on_space >= remaining_kw ? remaining_kw : PV_axis_ground_max_size_based_on_space
+                input_data_site["PV"][1]["min_kw"] = ground_PV_size * 0.999 #set the minimum kW for the ground PV
+                input_data_site["PV"][1]["max_kw"] = ground_PV_size #set the maximum kW for the ground PV
+                one_axis_deployment = true
+            end
+            return PV_roof_max_size_based_n_space, ground_PV_size, one_axis_deployment, input_data_site
+        end
+    #If option = B - attempt to offset entire load 
+    elseif sizing_option == "B"
+        #now re-set the sizes for PV on the roof and ground, with roof as the priority
+        if PV_roof_max_size_based_on_load <= PV_roof_max_size_based_n_space
+            println("PV roof max size based on load for $match_id is less than or equal to PV max size based on space.")
+            input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_on_load * 0.999
+            roof_PV_size = PV_roof_max_size_based_on_load
+            input_data_site["PV"][2]["max_kw"] = roof_PV_size
+            #since the roof size for the total load was calculated above and it is smaller than the total based on roof size, then we do not have any more PV to deploy and the ground PV is 0
+            ground_PV_size = 0 
+            input_data_site["PV"][1]["max_kw"] = ground_PV_size
+        elseif PV_roof_max_size_based_on_load > PV_roof_max_size_based_n_space
+            println("PV roof max size based on load for $match_id is greater than PV max size based on space.")
+            #fix the minimum kW for the roof 
+            input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.999
+            #identify the max kW for ground remainder after knowing the total load 
+            roof_PV_size = PV_roof_max_size_based_n_space
+            println("The PV roof size is: ", roof_PV_size)
+            input_data_site["PV"][2]["max_kw"] = roof_PV_size
+            
+            #get remaining kWh that need to be supplied by subtracting total load - load produced from roof PV
+            annual_production_from_roof_pv = sum(roof_PV_size * roof_fixed_prod_factor_series)
+            production_defecit = sum(load_vector) - annual_production_from_roof_pv
+
+            #calculate ground size using fixed rack production factor
+            ground_PV_size = production_defecit / (PV_fixed_ground_cap_factor * 8760)
+            println("The FIRST pass to assign ground PV size for $match_id is: ", ground_PV_size)
+            ground_PV_size = ground_PV_size > PV_fixed_ground_max_size_based_on_space ? PV_fixed_ground_max_size_based_on_space : ground_PV_size
+            println("The SECOND pass to assign ground PV size for $match_id is: ", ground_PV_size)
+            #inputs1.max_sizes["ground_mount"] = PV_fixed_ground_max_size_based_on_space
+            #sleep(10)
+
+            #check if the remainder ground size is over 1354 kW, if so, then we need to simulate 1-axis which would equal 1000 kW
+            if ground_PV_size > 1354 && PV_axis_ground_cap_factor != 0
+                println("Switching to ground 1-axis PV")
+                ground_PV_size = production_defecit / (PV_axis_ground_cap_factor * 8760)
+                println("The First pass to assign ground axis PV size for $match_id is: ", ground_PV_size)
+                ground_PV_size = ground_PV_size > PV_axis_ground_max_size_based_on_space ? PV_axis_ground_max_size_based_on_space : ground_PV_size
+                println("The Second pass to assign ground axis PV size for $match_id is: ", ground_PV_size)
+                #if ground_PV_size > PV_axis_ground_max_size_based_on_space
+                    #ground_PV_size = PV_axis_ground_max_size_based_on_space
+                #end
+                #inputs1.max_sizes["ground_mount"] = PV_axis_ground_max_size_based_on_space
+                PV_ground_max_size_based_on_space = PV_axis_ground_max_size_based_on_space
+                println("The PV ground max size based on space for $match_id is (acres): ", PV_axis_ground_max_size_based_on_space)
+                one_axis_deployment = true
+                #sleep(10)
+            end
+        end
+        return roof_PV_size, ground_PV_size, one_axis_deployment, input_data_site
+    #If option = C - max out the roof + land space available
+    elseif sizing_option == "C"
+        #decide on axis or fixed for ground mount 
+        if land_acres < 4.2 #if land acres is less than 4.2 then use fixed ground mount
+            input_data_site["PV"][1]["max_kw"] = PV_fixed_ground_max_size_based_on_space
+            input_data_site["PV"][1]["min_kw"] = PV_fixed_ground_max_size_based_on_space * 0.999
+            input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.999
+            input_data_site["PV"][2]["max_kw"] = PV_roof_max_size_based_n_space
+            return PV_roof_max_size_based_n_space, PV_fixed_ground_max_size_based_on_space, one_axis_deployment, input_data_site
+        else #if land acres is greater than 4.2 then use axis ground mount
+            input_data_site["PV"][1]["max_kw"] = PV_axis_ground_max_size_based_on_space
+            input_data_site["PV"][1]["min_kw"] = PV_axis_ground_max_size_based_on_space * 0.999
+            input_data_site["PV"][2]["min_kw"] = PV_roof_max_size_based_n_space * 0.999
+            input_data_site["PV"][2]["max_kw"] = PV_roof_max_size_based_n_space
+            one_axis_deployment = true
+            return PV_roof_max_size_based_n_space, PV_axis_ground_max_size_based_on_space, one_axis_deployment, input_data_site
+        end
     end
 end
 

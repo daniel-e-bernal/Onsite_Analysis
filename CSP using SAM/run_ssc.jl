@@ -174,7 +174,7 @@ function run_ssc(csp_type::String, facility_id::String, rated_power::Float64)
                     for i in 1:8760
                         push!(annual_energy,unsafe_load(c_response,i))  # For array type outputs
                     end
-                    println(string("Annual Electricity Production [MWhe]: ",round(Int,sum(annual_energy))))
+                    println(string("Annual Electricity Production [MWhe]: ", round(Int, sum(annual_energy))))
 
                 elseif k in ["total_land_area"]
                     val = convert(Cdouble, 0.0)
@@ -254,8 +254,8 @@ function run_ssc_options(csp_type::String, facility_id::String, option::String, 
                 #print(annual_generation)
                 error_ratio = (annual_generation - annual_demand) / annual_demand
                 error_ratio2 = (total_area - available_area) / available_area
-                println(string("Error ratio for generation to demand ratio: ",string(round(error_ratio,digits=4))))
-                println(string("Error ratio for area: ",string(round(error_ratio2,digits=4))))
+                println(string("Error ratio for generation to demand ratio: ",string(round(error_ratio, digits=4))))
+                println(string("Error ratio for area: ",string(round(error_ratio2, digits=4))))
                 if abs(error_ratio2) <= tol && (abs(error_ratio) <= tol || annual_generation <= annual_demand)
                     println("Final Rated Power: ", rated_power)
                     println("Final Total Land Area [acre]: ", total_area)
